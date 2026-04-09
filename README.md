@@ -65,6 +65,27 @@ npm run db:generate
 npm run build
 ```
 
+## Deploy automatico (GitHub Actions -> Vercel)
+
+Workflow criado em `.github/workflows/vercel-deploy.yml`.
+
+Comportamento:
+
+- Pull Request para `main`: gera deploy de preview no Vercel.
+- Push na `main`: gera deploy de producao no Vercel.
+
+Configure estes secrets no repositorio GitHub:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+No painel do Vercel, mantenha as variaveis de ambiente de producao:
+
+- `DATABASE_URL_PROD`
+- `DATABASE_POOL_MAX`
+- `DATABASE_SSL_REJECT_UNAUTHORIZED`
+
 ## Estrutura de pastas
 
 ```text
