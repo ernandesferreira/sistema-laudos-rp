@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root {
+  --app: #f8fafc;
+  --ink: #112033;
+  --surface: #ffffff;
+  --brand-50: #f3f7ff;
+  --brand-100: #e6efff;
+  --brand-200: #c9ddff;
+  --brand-300: #a5c4ff;
+  --brand-600: #2f6ef3;
+  --brand-700: #1c53c9;
+  --ok-100: #e8f8ef;
+  --ok-700: #1f7b47;
+  --warn-100: #fff6e7;
+  --warn-700: #956100;
+  --danger-100: #ffeceb;
+  --danger-700: #9c2f2a;
+}
+
+@theme inline {
+  --color-app: var(--app);
+  --color-ink: var(--ink);
+  --color-surface: var(--surface);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-ok-100: var(--ok-100);
+  --color-ok-700: var(--ok-700);
+  --color-warn-100: var(--warn-100);
+  --color-warn-700: var(--warn-700);
+  --color-danger-100: var(--danger-100);
+  --color-danger-700: var(--danger-700);
+  --font-sans: var(--font-sora);
+  --font-display: var(--font-barlow-condensed);
+}
+
+body {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(47, 110, 243, 0.2), transparent 40%),
+    radial-gradient(circle at 0% 100%, rgba(47, 110, 243, 0.15), transparent 35%),
+    var(--app);
+  color: var(--ink);
+  font-family: var(--font-sora), "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-barlow-condensed), "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.card {
+  border: 1px solid var(--brand-200);
+  background: var(--surface);
+  border-radius: 14px;
+}
+
+.btn-primary {
+  background: var(--brand-600);
+  color: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--brand-600);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background-color 150ms ease;
+}
+
+.btn-primary:hover {
+  background: var(--brand-700);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--ink);
+  border-radius: 10px;
+  border: 1px solid var(--brand-200);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--brand-200);
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.92rem;
+}
+
+.input:focus {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 1px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}

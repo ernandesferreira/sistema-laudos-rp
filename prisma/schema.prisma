@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  DATE
+  TIME
+  DATETIME
+  SELECT
+  MULTISELECT
+  RADIO
+  CHECKBOX
+  FILE_FAKE
+  SIGNATURE_TEXT
+  CPF_FAKE
+  RG_FAKE
+  PLATE
+  OBSERVATIONS
+}
+
+enum SubmissionStatus {
+  PENDING
+  REVIEWED
+  ARCHIVED
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String?
+  role         Role     @default(VIEWER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  templatesCreated ReportTemplate[] @relation("TemplateCreatedBy")
+}
+
+model ReportTemplate {
+  id          String         @id @default(cuid())
+  title       String
+  slug        String         @unique
+  description String?
+  status      TemplateStatus @default(DRAFT)
+  version     Int            @default(1)
+  isActive    Boolean        @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  createdById String?
+  createdBy   User?    @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  sections    ReportSection[]
+  submissions ReportSubmission[]
+
+  @@index([createdAt])
+  @@index([status, isActive, createdAt])
+  @@index([deletedAt])
+}
+
+model ReportSection {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  templateId String
+  template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  fields ReportField[]
+
+  @@index([templateId, order])
+}
+
+model ReportField {
+  id          String    @id @default(cuid())
+  label       String
+  name        String
+  type        FieldType
+  placeholder String?
+  helpText    String?
+  required    Boolean   @default(false)
+  order       Int       @default(0)
+  defaultValue Json?
+  mask        String?
+  isActive    Boolean   @default(true)
+  options     Json?
+  validation  Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sectionId String
+  section   ReportSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  answers SubmissionFieldAnswer[]
+
+  @@unique([sectionId, name])
+  @@index([sectionId, order])
+}
+
+model ReportSubmission {
+  id               String           @id @default(cuid())
+  submittedByName  String?
+  submittedByContact String?
+  status           SubmissionStatus @default(PENDING)
+  answers          Json
+  meta             Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  templateId String
+  template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  fieldAnswers SubmissionFieldAnswer[]
+
+  @@index([templateId, createdAt])
+}
+
+model SubmissionFieldAnswer {
+  id            String   @id @default(cuid())
+  labelSnapshot String
+  typeSnapshot  FieldType
+  value         Json?
+  createdAt     DateTime @default(now())
+
+  submissionId String
+  submission   ReportSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  fieldId String
+  field   ReportField @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId])
+  @@index([fieldId])
+}
