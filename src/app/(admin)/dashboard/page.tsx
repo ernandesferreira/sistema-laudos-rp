@@ -4,6 +4,8 @@ import { requirePagePermission } from "@/auth/guards";
 import { getCurrentAuthUser } from "@/auth/session";
 import { laudosService } from "@/application/laudos/service";
 import { requestService } from "@/application/requests/requestService";
+import { RequestRowActionsSelect } from "@/components/admin/requests/RequestRowActionsSelect";
+import { CopyProtocolCell } from "@/components/shared/CopyProtocolCell";
 import { Disclaimer } from "@/components/shared/Disclaimer";
 import { DashboardQuickActions } from "@/components/admin/DashboardQuickActions";
 import { RecentReportsTable } from "@/components/admin/RecentReportsTable";
@@ -52,6 +54,7 @@ export default async function DashboardPage() {
   const isPeritoProfile = authUser
     ? hasAnyRole(authUser, ["perito_rp"]) && !hasAnyRole(authUser, ["super_admin", "admin"])
     : false;
+  const isSuperAdmin = authUser ? hasAnyRole(authUser, ["super_admin"]) : false;
 
   if (isPeritoProfile && authUser) {
     let peritoSummary: Awaited<ReturnType<typeof requestService.getPeritoDashboardSummary>> | null = null;
@@ -133,9 +136,8 @@ export default async function DashboardPage() {
                     <th className="px-3 py-2">Protocolo</th>
                     <th className="px-3 py-2">Cidadao</th>
                     <th className="px-3 py-2">Documento</th>
-                    <th className="px-3 py-2">Modelo</th>
-                    <th className="px-3 py-2">Prioridade</th>
-                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Solicitacao</th>
+                    <th className="px-3 py-2">Situacao</th>
                     <th className="px-3 py-2">Data</th>
                     <th className="px-3 py-2">Acoes</th>
                   </tr>
@@ -143,22 +145,23 @@ export default async function DashboardPage() {
                 <tbody>
                   {peritoSummary.recentRequests.map((request) => (
                     <tr key={request.id} className="border-t border-slate-800/70">
-                      <td className="px-3 py-2 font-semibold text-slate-100">{request.protocol}</td>
+                      <td className="px-3 py-2">
+                        <CopyProtocolCell protocol={request.protocol} />
+                      </td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.fullName}</td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.documentNumber}</td>
                       <td className="px-3 py-2 text-slate-300">{request.template.title}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         {request.isCurrentRoleStep ? (
-                          <span className="rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
                             Etapa atual
                           </span>
                         ) : (
-                          <span className="rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-400">
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-400">
                             Fluxo futuro
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-200">{requestStatusLabel(request.status)}</td>
                       <td className="px-3 py-2 text-slate-300">
                         {new Intl.DateTimeFormat("pt-BR", {
                           dateStyle: "short",
@@ -166,23 +169,44 @@ export default async function DashboardPage() {
                         }).format(request.createdAt)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          {canReadRequestDetails ? (
-                            <Link href={`/requests/${request.id}`} className="btn-secondary text-xs">
-                              Detalhes
-                            </Link>
-                          ) : null}
+                        {(() => {
+                          const actionOptions: Array<{
+                            value: string;
+                            label: string;
+                            href: string;
+                          }> = [];
 
-                          {request.isCurrentRoleStep && canOpenSubmissionWorkflow ? (
-                            <Link href={`/submissions/${request.submissionId}/workflow`} className="btn-primary text-xs">
-                              Abrir aprovacoes
-                            </Link>
-                          ) : null}
+                          if (canReadRequestDetails) {
+                            actionOptions.push({
+                              value: "details",
+                              label: "Detalhes",
+                              href: `/requests/${request.id}`,
+                            });
+                          }
 
-                          {!canReadRequestDetails && (!request.isCurrentRoleStep || !canOpenSubmissionWorkflow) ? (
+                          if (request.isCurrentRoleStep && canOpenSubmissionWorkflow) {
+                            actionOptions.push({
+                              value: "approve",
+                              label: "Aprovar solicitacao",
+                              href: `/submissions/${request.submissionId}/workflow`,
+                            });
+                          }
+
+                          return actionOptions.length > 0 || isSuperAdmin ? (
+                            <RequestRowActionsSelect
+                              requestId={request.id}
+                              options={actionOptions}
+                              canInactivate={
+                                isSuperAdmin &&
+                                (request as { isActive?: boolean }).isActive !== false &&
+                                request.status !== "CANCELLED"
+                              }
+                              canDelete={isSuperAdmin}
+                            />
+                          ) : (
                             <span className="text-xs text-slate-500">Sem acesso</span>
-                          ) : null}
-                        </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -275,9 +299,8 @@ export default async function DashboardPage() {
                     <th className="px-3 py-2">Protocolo</th>
                     <th className="px-3 py-2">Cidadao</th>
                     <th className="px-3 py-2">Documento</th>
-                    <th className="px-3 py-2">Modelo</th>
-                    <th className="px-3 py-2">Prioridade</th>
-                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Solicitacao</th>
+                    <th className="px-3 py-2">Situacao</th>
                     <th className="px-3 py-2">Data</th>
                     <th className="px-3 py-2">Acoes</th>
                   </tr>
@@ -285,22 +308,23 @@ export default async function DashboardPage() {
                 <tbody>
                   {medicoSummary.recentRequests.map((request) => (
                     <tr key={request.id} className="border-t border-slate-800/70">
-                      <td className="px-3 py-2 font-semibold text-slate-100">{request.protocol}</td>
+                      <td className="px-3 py-2">
+                        <CopyProtocolCell protocol={request.protocol} />
+                      </td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.fullName}</td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.documentNumber}</td>
                       <td className="px-3 py-2 text-slate-300">{request.template.title}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         {request.isCurrentRoleStep ? (
-                          <span className="rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
                             Etapa atual
                           </span>
                         ) : (
-                          <span className="rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-400">
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-400">
                             Fluxo futuro
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-200">{requestStatusLabel(request.status)}</td>
                       <td className="px-3 py-2 text-slate-300">
                         {new Intl.DateTimeFormat("pt-BR", {
                           dateStyle: "short",
@@ -308,23 +332,44 @@ export default async function DashboardPage() {
                         }).format(request.createdAt)}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          {canReadRequestDetails ? (
-                            <Link href={`/requests/${request.id}`} className="btn-secondary text-xs">
-                              Detalhes
-                            </Link>
-                          ) : null}
+                        {(() => {
+                          const actionOptions: Array<{
+                            value: string;
+                            label: string;
+                            href: string;
+                          }> = [];
 
-                          {request.isCurrentRoleStep && canOpenSubmissionWorkflow ? (
-                            <Link href={`/submissions/${request.submissionId}/workflow`} className="btn-primary text-xs">
-                              Abrir aprovacoes
-                            </Link>
-                          ) : null}
+                          if (canReadRequestDetails) {
+                            actionOptions.push({
+                              value: "details",
+                              label: "Detalhes",
+                              href: `/requests/${request.id}`,
+                            });
+                          }
 
-                          {!canReadRequestDetails && (!request.isCurrentRoleStep || !canOpenSubmissionWorkflow) ? (
+                          if (request.isCurrentRoleStep && canOpenSubmissionWorkflow) {
+                            actionOptions.push({
+                              value: "approve",
+                              label: "Aprovar solicitacao",
+                              href: `/submissions/${request.submissionId}/workflow`,
+                            });
+                          }
+
+                          return actionOptions.length > 0 || isSuperAdmin ? (
+                            <RequestRowActionsSelect
+                              requestId={request.id}
+                              options={actionOptions}
+                              canInactivate={
+                                isSuperAdmin &&
+                                (request as { isActive?: boolean }).isActive !== false &&
+                                request.status !== "CANCELLED"
+                              }
+                              canDelete={isSuperAdmin}
+                            />
+                          ) : (
                             <span className="text-xs text-slate-500">Sem acesso</span>
-                          ) : null}
-                        </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -342,7 +387,7 @@ export default async function DashboardPage() {
     let databaseUnavailable = false;
 
     try {
-      operatorSummary = await requestService.getOperatorDashboardSummary(authUser.id);
+      operatorSummary = await requestService.getOperatorDashboardSummary();
     } catch {
       databaseUnavailable = true;
     }
@@ -354,9 +399,9 @@ export default async function DashboardPage() {
       <section className="space-y-4">
         <header className="rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-lg shadow-black/30 md:p-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-sky-300">Dashboard do operador</p>
-          <h1 className="mt-1 text-4xl uppercase text-slate-100 md:text-5xl">Minhas solicitacoes</h1>
+          <h1 className="mt-1 text-4xl uppercase text-slate-100 md:text-5xl">Solicitacoes abertas</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Visao operacional focada nas solicitacoes abertas por voce e no acompanhamento do andamento.
+            Visao operacional das solicitacoes abertas no sistema e acompanhamento do andamento.
           </p>
         </header>
 
@@ -372,7 +417,7 @@ export default async function DashboardPage() {
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard title="Minhas solicitacoes" value={operatorSummary?.totalRequests ?? 0} tone="blue" />
+          <StatCard title="Solicitacoes no sistema" value={operatorSummary?.totalRequests ?? 0} tone="blue" />
           <StatCard title="Ultimos 7 dias" value={operatorSummary?.requestsLast7Days ?? 0} tone="amber" />
           <StatCard
             title="Em andamento"
@@ -392,7 +437,7 @@ export default async function DashboardPage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/requests" className="btn-secondary">
-              Ver minhas solicitacoes
+              Ver solicitacoes
             </Link>
             {canCreateRequest ? (
               <Link href="/requests/new" className="btn-primary">
@@ -404,7 +449,7 @@ export default async function DashboardPage() {
 
         <section className="space-y-2">
           <div>
-            <h2 className="text-2xl uppercase text-slate-100">Ultimas solicitacoes abertas por voce</h2>
+            <h2 className="text-2xl uppercase text-slate-100">Ultimas solicitacoes abertas</h2>
             <p className="text-sm text-slate-400">Historico recente para acompanhamento rapido.</p>
           </div>
 
@@ -421,8 +466,8 @@ export default async function DashboardPage() {
                     <th className="px-3 py-2">Protocolo</th>
                     <th className="px-3 py-2">Cidadao</th>
                     <th className="px-3 py-2">Documento</th>
-                    <th className="px-3 py-2">Modelo</th>
-                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Solicitacao</th>
+                    <th className="px-3 py-2">Situacao</th>
                     <th className="px-3 py-2">Data</th>
                     <th className="px-3 py-2">Acoes</th>
                   </tr>
@@ -430,11 +475,27 @@ export default async function DashboardPage() {
                 <tbody>
                   {operatorSummary.recentRequests.map((request) => (
                     <tr key={request.id} className="border-t border-slate-800/70">
-                      <td className="px-3 py-2 font-semibold text-slate-100">{request.protocol}</td>
+                      <td className="px-3 py-2">
+                        <CopyProtocolCell protocol={request.protocol} />
+                      </td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.fullName}</td>
                       <td className="px-3 py-2 text-slate-300">{request.citizen.documentNumber}</td>
                       <td className="px-3 py-2 text-slate-300">{request.template.title}</td>
-                      <td className="px-3 py-2 text-slate-200">{requestStatusLabel(request.status)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {request.status === "FINAL_APPROVED" || request.status === "FINAL_REJECTED" ? (
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
+                            Finalizado
+                          </span>
+                        ) : request.status === "IN_PROGRESS" || request.status === "PENDING" ? (
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-sky-500/35 bg-sky-500/20 px-2 py-0.5 text-xs text-sky-200">
+                            Em andamento
+                          </span>
+                        ) : (
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-amber-500/35 bg-amber-500/20 px-2 py-0.5 text-xs text-amber-200">
+                            {requestStatusLabel(request.status)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-slate-300">
                         {new Intl.DateTimeFormat("pt-BR", {
                           dateStyle: "short",
@@ -442,10 +503,27 @@ export default async function DashboardPage() {
                         }).format(request.createdAt)}
                       </td>
                       <td className="px-3 py-2">
-                        {canReadRequestDetails ? (
-                          <Link href={`/requests/${request.id}`} className="btn-secondary text-xs">
-                            Detalhes
-                          </Link>
+                        {canReadRequestDetails || isSuperAdmin ? (
+                          <RequestRowActionsSelect
+                            requestId={request.id}
+                            options={
+                              canReadRequestDetails
+                                ? [
+                                    {
+                                      value: "details",
+                                      label: "Detalhes",
+                                      href: `/requests/${request.id}`,
+                                    },
+                                  ]
+                                : []
+                            }
+                            canInactivate={
+                              isSuperAdmin &&
+                              (request as { isActive?: boolean }).isActive !== false &&
+                              request.status !== "CANCELLED"
+                            }
+                            canDelete={isSuperAdmin}
+                          />
                         ) : (
                           <span className="text-xs text-slate-500">Sem acesso</span>
                         )}

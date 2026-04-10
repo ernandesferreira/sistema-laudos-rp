@@ -9,6 +9,7 @@ type DeclarationStep = {
 };
 
 type DeclarationPayload = {
+  protocol: string;
   citizenName: string;
   passportNumber: string;
   requestName: string;
@@ -232,7 +233,7 @@ export async function buildDeclarationAptidaoPdf(payload: DeclarationPayload) {
     color: rgb(0.35, 0.35, 0.38),
   });
 
-  page.drawText(`Protocolo interno: ${payload.passportNumber}`, {
+  page.drawText(`Protocolo interno: ${payload.protocol}`, {
     x: left,
     y: 66,
     size: 9,

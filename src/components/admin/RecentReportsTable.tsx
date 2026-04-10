@@ -62,9 +62,9 @@ export function RecentReportsTable({ items }: RecentReportsTableProps) {
                     timeStyle: "short",
                   }).format(item.createdAt)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 whitespace-nowrap">
                   <span
-                    className={`rounded-full border px-2 py-1 text-xs font-semibold ${statusTone[item.status] ?? "bg-slate-500/20 text-slate-200 border-slate-400/30"}`}
+                    className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-semibold ${statusTone[item.status] ?? "bg-slate-500/20 text-slate-200 border-slate-400/30"}`}
                   >
                     {item.status}
                   </span>

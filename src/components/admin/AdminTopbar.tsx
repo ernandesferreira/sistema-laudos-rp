@@ -34,9 +34,10 @@ export function AdminTopbar({ currentUser }: AdminTopbarProps) {
   const canCreateRequests = currentUser ? hasPermission(currentUser, "requests.create") : false;
   const canReadWorkflows = currentUser ? hasPermission(currentUser, "workflows.read") : false;
   const canReadUsers = currentUser ? hasPermission(currentUser, "users.read") : false;
+  const canManageDiscord = currentUser ? hasPermission(currentUser, "discord.manage") : false;
   const canReadBranding = currentUser ? hasAnyRole(currentUser, ["super_admin"]) : false;
   const canReadPermissions = currentUser ? hasAnyRole(currentUser, ["super_admin"]) : false;
-  const showAdministrationBlock = canReadUsers || canReadPermissions || canReadBranding;
+  const showAdministrationBlock = canReadUsers || canManageDiscord || canReadPermissions || canReadBranding;
 
   return (
     <header className="glass-panel space-y-3 rounded-2xl px-4 py-3">
@@ -85,6 +86,11 @@ export function AdminTopbar({ currentUser }: AdminTopbarProps) {
             {canReadUsers ? (
               <Link href="/settings/users" className="btn-secondary text-xs">
                 Usuarios
+              </Link>
+            ) : null}
+            {canManageDiscord ? (
+              <Link href="/settings/discord" className="btn-secondary text-xs">
+                Discord
               </Link>
             ) : null}
             {canReadPermissions ? (

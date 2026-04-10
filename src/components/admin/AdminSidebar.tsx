@@ -37,6 +37,7 @@ const menuSections: SidebarSection[] = [
     title: "Operacao",
     links: [
       { href: "/requests", label: "Solicitacoes", requiredPermission: "requests.read" },
+      { href: "/licenses", label: "Licencas Liberadas", requiredPermission: "licenses.view" },
       { href: "/submissions", label: "Submisses", requiredPermission: "submissions.read" },
     ],
   },
@@ -51,6 +52,7 @@ const menuSections: SidebarSection[] = [
     title: "Administracao",
     links: [
       { href: "/settings/users", label: "Usuarios", requiredPermission: "users.read" },
+      { href: "/settings/discord", label: "Discord", requiredPermission: "discord.manage" },
       { href: "/settings/permissions", label: "Permissoes", requiredRoles: ["super_admin"] },
       { href: "/settings/branding", label: "Branding", requiredRoles: ["super_admin"] },
     ],

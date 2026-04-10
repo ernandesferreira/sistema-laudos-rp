@@ -7,7 +7,7 @@ import { asHttpError, ok } from "@/lib/http";
 
 export async function GET(request: Request) {
   try {
-    await requireApiPermission(request, "requests.read");
+    const authUser = await requireApiPermission(request, "requests.read");
 
     const searchParams = new URL(request.url).searchParams;
     const parsedQuery = listServiceRequestsQuerySchema.parse({
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     });
 
     const [result, templates] = await Promise.all([
-      requestService.listServiceRequests(parsedQuery),
+      requestService.listServiceRequests(parsedQuery, authUser ?? undefined),
       requestService.listServiceRequestTemplateOptions(),
     ]);
 

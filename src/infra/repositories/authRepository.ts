@@ -8,6 +8,7 @@ export async function findUserAuthProfileById(userId: string) {
       name: true,
       email: true,
       passportNumber: true,
+      oabNumber: true,
       roles: {
         where: {
           OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],

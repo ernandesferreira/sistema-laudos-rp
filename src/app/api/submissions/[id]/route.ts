@@ -8,10 +8,10 @@ type Context = {
 
 export async function GET(request: Request, context: Context) {
   try {
-    await requireApiPermission(request, "submissions.details.read");
+    const authUser = await requireApiPermission(request, "submissions.read");
 
     const { id } = await context.params;
-    const submission = await laudosService.getSubmissionById(id);
+    const submission = await laudosService.getSubmissionById(id, authUser ?? undefined);
 
     if (!submission) {
       return fail("Submission not found", 404);

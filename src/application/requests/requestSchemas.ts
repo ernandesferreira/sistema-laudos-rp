@@ -61,9 +61,19 @@ export const listServiceRequestsQuerySchema = z.object({
 
 export const createServiceRequestPayloadSchema = z.object({
   templateId: z.string().cuid(),
+  citizenName: z.string().trim().min(3).max(120),
+  citizenDocument: z.string().trim().min(3).max(40),
+  citizenContact: z.string().trim().min(3).max(80),
+  requesterName: z.string().trim().min(3).max(120),
+  requesterDocument: z.string().trim().min(3).max(40),
+  requesterOabNumber: z.string().trim().min(3).max(40).optional(),
   answers: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const serviceRequestIdParamSchema = z.object({
   id: z.string().cuid(),
+});
+
+export const manageServiceRequestPayloadSchema = z.object({
+  action: z.enum(["inactivate"]),
 });

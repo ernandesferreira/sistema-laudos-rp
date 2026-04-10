@@ -4,6 +4,7 @@ import type { RoleKey } from "@/auth/roles";
 type CreateUserInput = {
   name: string;
   passportNumber: string;
+  oabNumber?: string;
   email: string;
   passwordHash: string | null;
   isActive: boolean;
@@ -15,6 +16,7 @@ type UpdateUserInput = {
   id: string;
   name?: string;
   passportNumber?: string;
+  oabNumber?: string;
   email?: string;
   passwordHash?: string | null;
   isActive?: boolean;
@@ -55,6 +57,12 @@ export async function listUsers(input: { search?: string }) {
                 mode: "insensitive",
               },
             },
+            {
+              oabNumber: {
+                contains: input.search,
+                mode: "insensitive",
+              },
+            },
           ]
         : undefined,
     },
@@ -65,6 +73,7 @@ export async function listUsers(input: { search?: string }) {
       id: true,
       name: true,
       passportNumber: true,
+      oabNumber: true,
       email: true,
       isActive: true,
       createdAt: true,
@@ -94,6 +103,7 @@ export async function getUserById(id: string) {
       id: true,
       name: true,
       passportNumber: true,
+      oabNumber: true,
       email: true,
       isActive: true,
       createdAt: true,
@@ -135,6 +145,7 @@ export async function createUser(input: CreateUserInput) {
       data: {
         name: input.name,
         passportNumber: input.passportNumber,
+        oabNumber: input.oabNumber,
         email: input.email,
         passwordHash: input.passwordHash,
         isActive: input.isActive,
@@ -180,6 +191,7 @@ export async function updateUser(input: UpdateUserInput) {
       data: {
         name: input.name,
         passportNumber: input.passportNumber,
+        oabNumber: input.oabNumber,
         email: input.email,
         passwordHash: input.passwordHash,
         isActive: input.isActive,

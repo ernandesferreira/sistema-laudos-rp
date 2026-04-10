@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/auth/guards";
+import { getCurrentAuthUser } from "@/auth/session";
 import { requestService } from "@/application/requests/requestService";
 import { RequestCreateForm } from "@/components/admin/requests/RequestCreateForm";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -10,7 +11,16 @@ export const dynamic = "force-dynamic";
 export default async function NewServiceRequestPage() {
   await requirePagePermission("requests.create");
 
-  const templateOptions = await requestService.listServiceRequestTemplateOptions();
+  const [templateOptions, authUser] = await Promise.all([
+    requestService.listServiceRequestTemplateOptions(),
+    getCurrentAuthUser(),
+  ]);
+
+  const requesterDefaults = {
+    name: authUser?.name ?? "",
+    document: authUser?.passportNumber ?? "",
+    oabNumber: authUser?.oabNumber ?? "",
+  };
 
   return (
     <section className="space-y-4">
@@ -30,7 +40,7 @@ export default async function NewServiceRequestPage() {
           description="Publique um modelo e configure aprovacoes ativas para abrir solicitacoes."
         />
       ) : (
-        <RequestCreateForm templateOptions={templateOptions} />
+        <RequestCreateForm templateOptions={templateOptions} requesterDefaults={requesterDefaults} />
       )}
     </section>
   );

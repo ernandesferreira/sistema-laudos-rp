@@ -44,6 +44,7 @@ export default async function EditUserPage({ params }: Props) {
           id: user.id,
           name: user.name,
           passportNumber: user.passportNumber,
+          oabNumber: user.oabNumber ?? "",
           email: user.email,
           isActive: user.isActive,
           roleKeys: user.roles.map((entry) => entry.role.key),

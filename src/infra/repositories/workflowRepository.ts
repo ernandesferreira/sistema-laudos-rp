@@ -1,6 +1,66 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { WorkflowDecision, WorkflowTransitionBehavior } from "@/domain/laudos/workflow";
+
+async function ensureReleasedLicense(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+) {
+  const request = await tx.serviceRequest.findFirst({
+    where: {
+      id: requestId,
+      isDeleted: false,
+    },
+    select: {
+      id: true,
+      protocol: true,
+      citizenName: true,
+      citizenDocument: true,
+      template: {
+        select: {
+          title: true,
+        },
+      },
+    },
+  });
+
+  if (!request) {
+    return;
+  }
+
+  const id = `rls_${request.id}`;
+  const now = new Date();
+
+  await tx.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "public"."released_licenses" (
+        "id",
+        "serviceRequestId",
+        "licenseNumber",
+        "protocol",
+        "citizenName",
+        "citizenDocument",
+        "templateTitle",
+        "releasedAt",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${id},
+        ${request.id},
+        ${`LIC-${request.protocol}`},
+        ${request.protocol},
+        ${request.citizenName},
+        ${request.citizenDocument},
+        ${request.template.title},
+        ${now},
+        ${now},
+        ${now}
+      )
+      ON CONFLICT ("serviceRequestId") DO NOTHING
+    `,
+  );
+}
 
 async function syncServiceRequestState(
   tx: Prisma.TransactionClient,
@@ -17,6 +77,7 @@ async function syncServiceRequestState(
   const requests = await tx.serviceRequest.findMany({
     where: {
       submissionId,
+      isDeleted: false,
     },
     select: {
       id: true,
@@ -74,6 +135,10 @@ async function syncServiceRequestState(
           workflowInstanceId: request.workflowInstance?.id ?? null,
         },
       });
+    }
+
+    if (status === "FINAL_APPROVED") {
+      await ensureReleasedLicense(tx, request.id);
     }
   }
 }
@@ -371,6 +436,13 @@ export async function getSubmissionWorkflowBySubmissionId(submissionId: string) 
       workflowEvents: {
         orderBy: { performedAt: "asc" },
         include: {
+          submissionStep: {
+            select: {
+              id: true,
+              name: true,
+              order: true,
+            },
+          },
           performedBy: {
             select: {
               id: true,
@@ -417,6 +489,19 @@ export async function applyWorkflowStepDecision(input: {
 
     if (step.status !== "IN_PROGRESS") {
       throw new Error("Only the current in-progress step can be executed");
+    }
+
+    // Hard guard: prevent out-of-order approvals when workflow state gets inconsistent.
+    const previousStep = submission.workflowSteps.find((item) => item.order === step.order - 1);
+
+    if (step.order > 0) {
+      if (!previousStep) {
+        throw new Error("Previous workflow step not found");
+      }
+
+      if (previousStep.status !== "COMPLETED") {
+        throw new Error("Previous workflow step must be completed before approving this step");
+      }
     }
 
     const transitionBehavior = resolveTransitionBehavior({

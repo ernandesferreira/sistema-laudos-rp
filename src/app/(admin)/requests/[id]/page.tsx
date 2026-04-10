@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { hasPermission } from "@/auth/authorization";
+import { hasAnyRole, hasPermission } from "@/auth/authorization";
+import { canActOnCurrentStep, resolveCurrentWorkflowStep } from "@/auth/workflowAccess";
 import { requirePagePermission } from "@/auth/guards";
-import { getCurrentAuthUser } from "@/auth/session";
 import { requestService } from "@/application/requests/requestService";
+import { RequestRowActionsSelect } from "@/components/admin/requests/RequestRowActionsSelect";
 import { SubmissionWorkflowRunner } from "@/components/admin/workflow/SubmissionWorkflowRunner";
 import { PageHeader } from "@/components/shared/PageHeader";
 
@@ -14,28 +15,39 @@ type Props = {
 };
 
 export default async function ServiceRequestDetailsPage({ params }: Props) {
-  await requirePagePermission("requests.details.read");
-
-  const authUser = await getCurrentAuthUser();
+  const authUser = await requirePagePermission("requests.read");
   const canOpenWorkflow = authUser ? hasPermission(authUser, "submissions.details.read") : false;
-  const canManageWorkflow = authUser
+  const canManageWorkflowByPermission = authUser
     ? hasPermission(authUser, "submissions.workflow.execute") ||
       hasPermission(authUser, "submissions.workflow.rollback")
     : false;
 
   const { id } = await params;
-  const serviceRequest = await requestService.getServiceRequestById(id);
+  const serviceRequest = await requestService.getServiceRequestById(id, authUser ?? undefined);
 
   if (!serviceRequest) {
     notFound();
   }
 
-  const citizenName = serviceRequest.citizen.fullName;
-  const citizenDocument = serviceRequest.citizen.documentNumber;
-  const citizenContact = serviceRequest.citizen.phone ?? serviceRequest.citizenContact;
-  const canDownloadDeclaration =
+  const currentWorkflowStep = resolveCurrentWorkflowStep(
+    serviceRequest.submission.workflowSteps,
+    serviceRequest.submission.currentStepOrder,
+  );
+  const canActCurrentStep = canActOnCurrentStep(authUser, currentWorkflowStep);
+  const canManageWorkflow = canManageWorkflowByPermission && canOpenWorkflow;
+  const isSuperAdmin = authUser ? hasAnyRole(authUser, ["super_admin"]) : false;
+
+  const citizenName = serviceRequest.citizenName;
+  const citizenDocument = serviceRequest.citizenDocument;
+  const citizenContact = serviceRequest.citizenContact;
+  const requesterName = serviceRequest.requesterName;
+  const requesterDocument = serviceRequest.requesterDocument;
+  const requesterOabNumber = serviceRequest.requesterOabNumber;
+  const isFinishedWorkflow =
     serviceRequest.submission.workflowStatus === "FINAL_APPROVED" ||
     serviceRequest.submission.workflowStatus === "FINAL_REJECTED";
+  const canDownloadDeclaration =
+    isFinishedWorkflow && (authUser ? !hasAnyRole(authUser, ["operador", "medico"]) : false);
 
   return (
     <section className="space-y-4">
@@ -47,9 +59,18 @@ export default async function ServiceRequestDetailsPage({ params }: Props) {
             <Link href="/requests" className="btn-secondary">
               Voltar
             </Link>
-            {canOpenWorkflow ? (
+            {isSuperAdmin ? (
+              <RequestRowActionsSelect
+                requestId={serviceRequest.id}
+                options={[]}
+                canInactivate={(serviceRequest as { isActive?: boolean }).isActive !== false && serviceRequest.status !== "CANCELLED"}
+                canDelete={true}
+                placeholder="Gerenciar"
+              />
+            ) : null}
+            {canOpenWorkflow && canActCurrentStep ? (
               <Link href={`/submissions/${serviceRequest.submissionId}/workflow`} className="btn-primary">
-                Abrir aprovacoes
+                Aprovar solicitacao
               </Link>
             ) : null}
             {canDownloadDeclaration ? (
@@ -63,6 +84,44 @@ export default async function ServiceRequestDetailsPage({ params }: Props) {
 
       <article className="card p-4 md:p-6">
         <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Dados do solicitante</p>
+            <div className="mt-2 space-y-2">
+              <div>
+                <p className="text-xs uppercase text-slate-500">Operador responsavel</p>
+                <p className="text-sm text-slate-100">{requesterName}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-slate-500">Passaporte</p>
+                <p className="text-sm text-slate-100">{requesterDocument}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-slate-500">OAB</p>
+                <p className="text-sm text-slate-100">{requesterOabNumber ?? "Nao informado"}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-3">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Dados do cidadao</p>
+            <div className="mt-2 space-y-2">
+              <div>
+                <p className="text-xs uppercase text-slate-500">Cidadao</p>
+                <p className="text-sm text-slate-100">{citizenName}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-slate-500">Documento</p>
+                <p className="text-sm text-slate-100">{citizenDocument}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-slate-500">Contato</p>
+                <p className="text-sm text-slate-100">{citizenContact}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
           <div>
             <p className="text-xs uppercase text-slate-500">Protocolo</p>
             <p className="text-sm text-slate-100">{serviceRequest.protocol}</p>
@@ -70,22 +129,6 @@ export default async function ServiceRequestDetailsPage({ params }: Props) {
           <div>
             <p className="text-xs uppercase text-slate-500">Status da solicitacao</p>
             <p className="text-sm text-slate-100">{serviceRequest.status}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-500">Cidadao</p>
-            <p className="text-sm text-slate-100">{citizenName}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-500">Documento</p>
-            <p className="text-sm text-slate-100">{citizenDocument}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-500">Contato</p>
-            <p className="text-sm text-slate-100">{citizenContact}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-500">Operador responsavel</p>
-            <p className="text-sm text-slate-100">{serviceRequest.createdBy.name}</p>
           </div>
           <div>
             <p className="text-xs uppercase text-slate-500">Submissao vinculada</p>

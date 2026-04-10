@@ -7,6 +7,8 @@ export type PermissionCategory =
   | "sections"
   | "fields"
   | "requests"
+  | "licenses"
+  | "discord"
   | "workflows"
   | "submissions"
   | "audit"
@@ -35,6 +37,8 @@ export const PERMISSION_CATEGORY_ORDER: PermissionCategory[] = [
   "sections",
   "fields",
   "requests",
+  "licenses",
+  "discord",
   "workflows",
   "submissions",
   "audit",
@@ -49,6 +53,8 @@ export const PERMISSION_CATEGORY_LABELS: Record<PermissionCategory, string> = {
   sections: "Secoes",
   fields: "Campos",
   requests: "Solicitacoes",
+  licenses: "Licencas",
+  discord: "Discord",
   workflows: "Aprovacoes",
   submissions: "Submissoes",
   audit: "Auditoria",
@@ -64,6 +70,8 @@ export function toPermissionCategory(resource: string): PermissionCategory {
     resource === "sections" ||
     resource === "fields" ||
     resource === "requests" ||
+    resource === "licenses" ||
+    resource === "discord" ||
     resource === "workflows" ||
     resource === "submissions" ||
     resource === "audit" ||

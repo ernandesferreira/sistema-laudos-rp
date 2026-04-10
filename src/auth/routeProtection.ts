@@ -37,8 +37,16 @@ export const ROUTE_POLICIES: RoutePolicy[] = [
     requiredPermissions: ["requests.read"],
   },
   {
+    pathPrefix: "/licenses",
+    requiredPermissions: ["licenses.view"],
+  },
+  {
     pathPrefix: "/settings/users",
     requiredPermissions: ["users.read"],
+  },
+  {
+    pathPrefix: "/settings/discord",
+    requiredPermissions: ["discord.manage"],
   },
   {
     pathPrefix: "/settings",
@@ -65,6 +73,10 @@ export const ROUTE_POLICIES: RoutePolicy[] = [
     requiredPermissions: ["requests.read"],
   },
   {
+    pathPrefix: "/api/licenses",
+    requiredPermissions: ["licenses.view"],
+  },
+  {
     pathPrefix: "/api/workflows",
     requiredPermissions: ["workflows.read"],
   },
@@ -75,6 +87,10 @@ export const ROUTE_POLICIES: RoutePolicy[] = [
   {
     pathPrefix: "/api/users",
     requiredPermissions: ["users.read"],
+  },
+  {
+    pathPrefix: "/api/discord",
+    requiredPermissions: ["discord.manage"],
   },
 ];
 

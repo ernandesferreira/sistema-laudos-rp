@@ -22,6 +22,9 @@ import {
   updateSection,
   updateTemplate,
 } from "@/infra/repositories/laudosRepository";
+import type { AuthUser } from "@/auth/session";
+import { canViewSubmission } from "@/auth/workflowAccess";
+import { AppError } from "@/lib/errors";
 
 export const laudosService = {
   listTemplates,
@@ -41,9 +44,36 @@ export const laudosService = {
   deleteField,
   reorderFields,
   createSubmission,
-  listSubmissions,
-  listSubmissionsPaginated,
+  async listSubmissions(user?: AuthUser) {
+    return listSubmissions({ authUser: user ?? null });
+  },
+  async listSubmissionsPaginated(input: Parameters<typeof listSubmissionsPaginated>[0], user?: AuthUser) {
+    return listSubmissionsPaginated(input, { authUser: user ?? null });
+  },
   listSubmissionTemplateOptions,
-  getSubmissionById,
+  async getSubmissionById(id: string, user?: AuthUser) {
+    const submission = await getSubmissionById(id);
+
+    if (!submission) {
+      return null;
+    }
+
+    if (!user) {
+      return submission;
+    }
+
+    const canView = canViewSubmission(user, {
+      createdById: submission.serviceRequest?.createdById ?? null,
+      currentStepOrder: submission.currentStepOrder,
+      workflowStatus: submission.workflowStatus,
+      workflowSteps: submission.workflowSteps,
+    });
+
+    if (!canView) {
+      throw new AppError("Usuario sem acesso a esta submissao", 403);
+    }
+
+    return submission;
+  },
   getSubmissionByProtocol,
 };

@@ -5,7 +5,7 @@ import { asHttpError, ok } from "@/lib/http";
 
 export async function GET(request: Request) {
   try {
-    await requireApiPermission(request, "submissions.read");
+    const authUser = await requireApiPermission(request, "submissions.read");
 
     const searchParams = new URL(request.url).searchParams;
     const parsedQuery = listSubmissionsQuerySchema.parse({
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     });
 
     const [result, templates] = await Promise.all([
-      laudosService.listSubmissionsPaginated(parsedQuery),
+      laudosService.listSubmissionsPaginated(parsedQuery, authUser ?? undefined),
       laudosService.listSubmissionTemplateOptions(),
     ]);
 

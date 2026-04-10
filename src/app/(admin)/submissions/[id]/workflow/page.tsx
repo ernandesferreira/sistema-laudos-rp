@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/auth/guards";
 import { getCurrentAuthUser } from "@/auth/session";
+import { laudosService } from "@/application/laudos/service";
 import { workflowService } from "@/application/laudos/workflowService";
 import { SubmissionWorkflowRunner } from "@/components/admin/workflow/SubmissionWorkflowRunner";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -14,10 +15,16 @@ type Props = {
 };
 
 export default async function SubmissionWorkflowPage({ params }: Props) {
-  await requirePagePermission("submissions.details.read");
+  await requirePagePermission("submissions.read");
 
   const user = await getCurrentAuthUser();
   const { id } = await params;
+  const submission = await laudosService.getSubmissionById(id, user ?? undefined);
+
+  if (!submission) {
+    notFound();
+  }
+
   const workflow = await workflowService.getSubmissionWorkflowBySubmissionId(id);
 
   if (!workflow) {

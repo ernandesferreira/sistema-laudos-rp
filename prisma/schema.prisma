@@ -100,11 +100,30 @@ enum RequestStatusChangeSource {
   SYSTEM
 }
 
+enum ReleasedLicenseStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum LicenseRevocationType {
+  DAYS
+  MONTHS
+  YEARS
+  PERMANENT
+}
+
+enum DiscordNotificationStatus {
+  SUCCESS
+  ERROR
+  SKIPPED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
+  email        String   @unique
   passportNumber String @unique
-  email        String
+  oabNumber    String?  @unique
   passwordHash String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -118,6 +137,8 @@ model User {
   serviceRequestsOpened        ServiceRequest[]          @relation("ServiceRequestOpenedBy")
   requestWorkflowStepsExecuted RequestWorkflowStep[]     @relation("RequestWorkflowStepExecutedBy")
   requestStatusChanges         RequestStatusHistory[]    @relation("RequestStatusChangedBy")
+  revokedLicenses              ReleasedLicense[]         @relation("LicenseRevokedBy")
+  documentRestrictionsCreated  DocumentRestriction[]     @relation("DocumentRestrictionCreatedBy")
 }
 
 model Citizen {
@@ -312,7 +333,16 @@ model ServiceRequest {
   citizenName      String
   citizenDocument  String
   citizenContact   String
+  requesterName    String
+  requesterDocument String
+  requesterOabNumber String?
   initialNotes     String?
+  isActive         Boolean              @default(true)
+  inactivatedAt    DateTime?
+  inactivatedByUserId String?
+  isDeleted        Boolean              @default(false)
+  deletedAt        DateTime?
+  deletedByUserId  String?
   status           ServiceRequestStatus @default(OPEN)
   currentStepOrder Int?
   openedAt         DateTime             @default(now())
@@ -333,13 +363,128 @@ model ServiceRequest {
 
   workflowInstance RequestWorkflowInstance?
   statusHistory    RequestStatusHistory[]
+  releasedLicense  ReleasedLicense?
+  restrictions     DocumentRestriction[]
 
   @@index([protocol])
   @@index([createdAt])
+  @@index([isActive, isDeleted, createdAt])
   @@index([status, createdAt])
   @@index([citizenId, createdAt])
   @@index([templateId, createdAt])
   @@index([createdById, createdAt])
+}
+
+model ReleasedLicense {
+  id               String               @id @default(cuid())
+  serviceRequestId String               @unique
+  licenseNumber    String               @unique
+  protocol         String
+  citizenName      String
+  citizenDocument  String
+  templateTitle    String
+  releasedAt       DateTime             @default(now())
+  licenseStatus    ReleasedLicenseStatus @default(ACTIVE)
+  revokedAt        DateTime?
+  revocationReason String?
+  revocationType   LicenseRevocationType?
+  revocationValue  Int?
+  revocationEndsAt DateTime?
+  revokedByUserId  String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  revokedBy      User?          @relation("LicenseRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+  restrictions   DocumentRestriction[]
+
+  @@index([releasedAt])
+  @@index([protocol])
+  @@index([citizenDocument])
+  @@index([licenseStatus, revokedAt])
+  @@index([revocationEndsAt])
+  @@map("released_licenses")
+}
+
+model DocumentRestriction {
+  id                     String   @id @default(cuid())
+  documentNumber         String
+  documentNumberNormalized String
+  serviceRequestId       String
+  releasedLicenseId      String
+  restrictionType        LicenseRevocationType
+  restrictionValue       Int?
+  startsAt               DateTime @default(now())
+  endsAt                 DateTime?
+  isPermanent            Boolean  @default(false)
+  reason                 String?
+  createdByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  serviceRequest  ServiceRequest  @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  releasedLicense ReleasedLicense @relation(fields: [releasedLicenseId], references: [id], onDelete: Cascade)
+  createdBy       User?           @relation("DocumentRestrictionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([documentNumberNormalized, startsAt])
+  @@index([endsAt])
+  @@index([isPermanent])
+  @@index([releasedLicenseId])
+  @@index([serviceRequestId])
+  @@map("document_restrictions")
+}
+
+model DiscordIntegration {
+  id          String   @id @default(cuid())
+  name        String
+  webhookUrl  String   @map("webhook_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  eventConfigs DiscordEventConfig[]
+  logs         DiscordNotificationLog[]
+
+  @@index([isActive])
+  @@map("discord_integrations")
+}
+
+model DiscordEventConfig {
+  id              String   @id @default(cuid())
+  eventKey        String   @map("event_key")
+  integrationId   String?  @map("integration_id")
+  isEnabled       Boolean  @default(false) @map("is_enabled")
+  messageTemplate String   @map("message_template")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  integration DiscordIntegration?   @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  logs        DiscordNotificationLog[]
+
+  @@index([eventKey, isEnabled])
+  @@index([integrationId])
+  @@map("discord_event_configs")
+}
+
+model DiscordNotificationLog {
+  id             String                    @id @default(cuid())
+  eventKey       String                    @map("event_key")
+  integrationId  String?                   @map("integration_id")
+  eventConfigId  String?                   @map("event_config_id")
+  payload        Json
+  status         DiscordNotificationStatus
+  responseStatus Int?                      @map("response_status")
+  errorMessage   String?                   @map("error_message")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+
+  integration DiscordIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  eventConfig DiscordEventConfig? @relation(fields: [eventConfigId], references: [id], onDelete: SetNull)
+
+  @@index([eventKey, createdAt])
+  @@index([status, createdAt])
+  @@index([integrationId, createdAt])
+  @@map("discord_notification_logs")
 }
 
 model TemplateWorkflow {

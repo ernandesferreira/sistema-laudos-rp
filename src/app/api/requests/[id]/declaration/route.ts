@@ -1,7 +1,10 @@
 import { requireApiPermission } from "@/auth/guards";
+import { hasAnyRole } from "@/auth/authorization";
+import { getAuthIdentityFromRequest, resolveAuthUser } from "@/auth/session";
 import { requestService } from "@/application/requests/requestService";
 import { buildDeclarationAptidaoPdf } from "@/lib/declarationAptidaoPdf";
 import { asHttpError } from "@/lib/http";
+import { AppError } from "@/lib/errors";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -17,12 +20,22 @@ function sanitizeFileNamePart(value: string) {
 
 export async function GET(request: Request, context: Context) {
   try {
-    await requireApiPermission(request, "requests.details.read");
+    let authUser = await requireApiPermission(request, "requests.details.read");
+
+    if (!authUser) {
+      const identity = getAuthIdentityFromRequest(request);
+      authUser = await resolveAuthUser(identity);
+    }
+
+    if (authUser && hasAnyRole(authUser, ["operador", "medico"])) {
+      throw new AppError("Perfil sem permissao para baixar declaracao em PDF", 403);
+    }
 
     const { id } = await context.params;
     const declarationData = await requestService.getDeclarationData(id);
 
     const pdfBytes = await buildDeclarationAptidaoPdf({
+      protocol: declarationData.protocol,
       citizenName: declarationData.citizenName,
       passportNumber: declarationData.passportNumber,
       requestName: declarationData.requestName,

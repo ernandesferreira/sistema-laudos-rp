@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/auth/guards";
+import { getCurrentAuthUser } from "@/auth/session";
 import { laudosService } from "@/application/laudos/service";
 import { PageHeader } from "@/components/shared/PageHeader";
 
@@ -23,10 +24,11 @@ function stringifyValue(value: unknown) {
 }
 
 export default async function SubmissionDetailsPage({ params }: Props) {
-  await requirePagePermission("submissions.details.read");
+  await requirePagePermission("submissions.read");
+  const authUser = await getCurrentAuthUser();
 
   const { id } = await params;
-  const submission = await laudosService.getSubmissionById(id);
+  const submission = await laudosService.getSubmissionById(id, authUser ?? undefined);
 
   if (!submission) {
     notFound();

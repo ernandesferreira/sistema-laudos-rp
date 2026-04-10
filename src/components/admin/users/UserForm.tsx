@@ -13,6 +13,7 @@ type InitialUser = {
   id: string;
   name: string;
   passportNumber: string;
+  oabNumber: string;
   email: string;
   isActive: boolean;
   roleKeys: string[];
@@ -30,6 +31,7 @@ export function UserForm({ mode, roleOptions, initialUser }: UserFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(initialUser?.name ?? "");
   const [passportNumber, setPassportNumber] = useState(initialUser?.passportNumber ?? "");
+  const [oabNumber, setOabNumber] = useState(initialUser?.oabNumber ?? "");
   const [email, setEmail] = useState(initialUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [isActive, setIsActive] = useState(initialUser?.isActive ?? true);
@@ -62,6 +64,7 @@ export function UserForm({ mode, roleOptions, initialUser }: UserFormProps) {
 
     const sanitizedName = name.trim();
     const sanitizedPassport = passportNumber.trim().toUpperCase();
+    const sanitizedOabNumber = oabNumber.trim().toUpperCase();
     const sanitizedEmail = email.trim().toLowerCase();
 
     if (sanitizedName.length < 2) {
@@ -76,6 +79,11 @@ export function UserForm({ mode, roleOptions, initialUser }: UserFormProps) {
 
     if (sanitizedEmail.length < 5) {
       setError("Informe um email valido.");
+      return;
+    }
+
+    if (sanitizedOabNumber.length > 0 && sanitizedOabNumber.length < 3) {
+      setError("Informe um numero de OAB valido.");
       return;
     }
 
@@ -104,6 +112,7 @@ export function UserForm({ mode, roleOptions, initialUser }: UserFormProps) {
         body: JSON.stringify({
           name: sanitizedName,
           passportNumber: sanitizedPassport,
+          oabNumber: sanitizedOabNumber || undefined,
           email: sanitizedEmail,
           password: password.trim().length > 0 ? password : undefined,
           roleKeys,
@@ -173,6 +182,16 @@ export function UserForm({ mode, roleOptions, initialUser }: UserFormProps) {
             required
           />
           <span className="text-xs text-slate-500">Contato complementar (nao usado como chave principal).</span>
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-xs uppercase text-slate-400">Numero da OAB (opcional)</span>
+          <input
+            value={oabNumber}
+            onChange={(event) => setOabNumber(event.target.value.toUpperCase())}
+            className="input"
+            placeholder="ex.: 12345/SP"
+          />
         </label>
         </div>
 

@@ -38,6 +38,10 @@ function parseUniqueConstraintTarget(error: unknown) {
     return "email";
   }
 
+  if (target.includes("oabNumber")) {
+    return "oabNumber";
+  }
+
   return "unknown";
 }
 
@@ -61,6 +65,7 @@ export const userService = {
       return await createUser({
         name: payload.name,
         passportNumber: payload.passportNumber.trim().toUpperCase(),
+        oabNumber: payload.oabNumber?.trim().toUpperCase(),
         email: payload.email.toLowerCase(),
         passwordHash: payload.password ? hashPassword(payload.password) : null,
         isActive: payload.isActive,
@@ -76,6 +81,10 @@ export const userService = {
 
       if (conflictTarget === "email") {
         throw new AppError("Ja existe usuario com este email", 409);
+      }
+
+      if (conflictTarget === "oabNumber") {
+        throw new AppError("Ja existe usuario com este numero da OAB", 409);
       }
 
       if (conflictTarget === "unknown") {
@@ -95,6 +104,7 @@ export const userService = {
         id,
         name: payload.name,
         passportNumber: payload.passportNumber?.trim().toUpperCase(),
+        oabNumber: payload.oabNumber?.trim().toUpperCase(),
         email: payload.email?.toLowerCase(),
         passwordHash: payload.password ? hashPassword(payload.password) : undefined,
         isActive: payload.isActive,
@@ -116,6 +126,10 @@ export const userService = {
 
       if (conflictTarget === "email") {
         throw new AppError("Ja existe usuario com este email", 409);
+      }
+
+      if (conflictTarget === "oabNumber") {
+        throw new AppError("Ja existe usuario com este numero da OAB", 409);
       }
 
       if (conflictTarget === "unknown") {

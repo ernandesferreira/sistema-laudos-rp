@@ -54,7 +54,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
     : listSubmissionsQuerySchema.parse({});
 
   const [result, templateOptions] = await Promise.all([
-    laudosService.listSubmissionsPaginated(filters),
+    laudosService.listSubmissionsPaginated(filters, authUser ?? undefined),
     laudosService.listSubmissionTemplateOptions(),
   ]);
 
@@ -99,6 +99,7 @@ export default async function SubmissionsPage({ searchParams }: Props) {
           submissions={result.submissions}
           pagination={result.pagination}
           canViewDetails={canReadSubmissionDetails}
+          currentUser={authUser}
           filters={{
             protocol: filters.protocol,
             name: filters.name,

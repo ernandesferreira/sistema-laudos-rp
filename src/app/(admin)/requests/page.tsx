@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { hasAnyRole, hasPermission } from "@/auth/authorization";
+import { canActOnCurrentStep, resolveCurrentWorkflowStep } from "@/auth/workflowAccess";
 import { requirePagePermission } from "@/auth/guards";
 import { getCurrentAuthUser } from "@/auth/session";
 import { requestService } from "@/application/requests/requestService";
 import { listServiceRequestsQuerySchema } from "@/application/requests/requestSchemas";
+import { RequestRowActionsSelect } from "@/components/admin/requests/RequestRowActionsSelect";
+import { CopyProtocolCell } from "@/components/shared/CopyProtocolCell";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 
@@ -53,6 +56,13 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
   const authUser = await getCurrentAuthUser();
   const canCreateRequest = authUser ? hasPermission(authUser, "requests.create") : false;
   const canReadRequestDetails = authUser ? hasPermission(authUser, "requests.details.read") : false;
+  const canExecuteSubmissionWorkflow = authUser
+    ? hasPermission(authUser, "submissions.workflow.execute")
+    : false;
+  const canOpenWorkflowDetails = authUser ? hasPermission(authUser, "submissions.details.read") : false;
+  const canShowDetailsAction = canReadRequestDetails || canOpenWorkflowDetails;
+  const canDownloadDeclaration = authUser ? !hasAnyRole(authUser, ["operador", "medico"]) : false;
+  const isSuperAdmin = authUser ? hasAnyRole(authUser, ["super_admin"]) : false;
   const isJudgeProfile = authUser
     ? hasAnyRole(authUser, ["juiz"]) && !hasAnyRole(authUser, ["super_admin", "admin"])
     : false;
@@ -72,19 +82,20 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
   });
 
   const parsedFilters = parsedQuery.success ? parsedQuery.data : listServiceRequestsQuerySchema.parse({});
-  const filters = isJudgeProfile ? { ...parsedFilters, judgeQueue: true } : parsedFilters;
+  const filters = parsedFilters;
+  const isJudgeQueueView = Boolean(filters.judgeQueue);
 
   const [result, templateOptions] = await Promise.all([
-    requestService.listServiceRequests(filters),
+    requestService.listServiceRequests(filters, authUser ?? undefined),
     requestService.listServiceRequestTemplateOptions(),
   ]);
 
   return (
     <section className="space-y-4">
       <PageHeader
-        title={isJudgeProfile ? "Fila de solicitacoes do juiz" : "Solicitacoes"}
+        title={isJudgeQueueView ? "Fila de solicitacoes do juiz" : "Solicitacoes"}
         description={
-          isJudgeProfile
+          isJudgeQueueView
             ? "Solicitacoes finalizadas com declaracao de aptidao pronta para validacao judicial e download."
             : "Fila de abertura de solicitacoes com rastreabilidade de operador, cidadao e andamento das aprovacoes."
         }
@@ -97,8 +108,46 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
         }
       />
 
+      {isJudgeProfile ? (
+        <div className="card flex flex-wrap items-center gap-2 p-3">
+          <Link
+            href={`/requests${buildQueryString({
+              protocol: filters.protocol,
+              citizenName: filters.citizenName,
+              citizenDocument: filters.citizenDocument,
+              templateId: filters.templateId,
+              status: filters.status,
+              dateFrom: filters.dateFrom,
+              dateTo: filters.dateTo,
+              pageSize: filters.pageSize,
+              page: 1,
+            })}`}
+            className={isJudgeQueueView ? "btn-secondary" : "btn-primary"}
+          >
+            Solicitacoes abertas
+          </Link>
+          <Link
+            href={`/requests${buildQueryString({
+              protocol: filters.protocol,
+              citizenName: filters.citizenName,
+              citizenDocument: filters.citizenDocument,
+              templateId: filters.templateId,
+              status: filters.status,
+              dateFrom: filters.dateFrom,
+              dateTo: filters.dateTo,
+              judgeQueue: "true",
+              pageSize: filters.pageSize,
+              page: 1,
+            })}`}
+            className={isJudgeQueueView ? "btn-primary" : "btn-secondary"}
+          >
+            Fila judicial
+          </Link>
+        </div>
+      ) : null}
+
       <form method="get" className="card grid gap-3 p-4 md:grid-cols-4 md:p-5">
-        {isJudgeProfile ? <input type="hidden" name="judgeQueue" value="true" /> : null}
+        {isJudgeQueueView ? <input type="hidden" name="judgeQueue" value="true" /> : null}
         <input name="protocol" defaultValue={filters.protocol ?? ""} placeholder="Protocolo" className="input" />
         <input
           name="citizenName"
@@ -164,8 +213,7 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
                 <th className="px-3 py-2">Protocolo</th>
                 <th className="px-3 py-2">Cidadao</th>
                 <th className="px-3 py-2">Documento</th>
-                <th className="px-3 py-2">Modelo</th>
-                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Solicitacao</th>
                 <th className="px-3 py-2">Situacao</th>
                 <th className="px-3 py-2">Etapa</th>
                 <th className="px-3 py-2">Operador</th>
@@ -176,22 +224,23 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
             <tbody>
               {result.requests.map((request) => (
                 <tr key={request.id} className="border-t border-slate-800/70">
-                  <td className="px-3 py-2 font-semibold text-slate-100">{request.protocol}</td>
+                  <td className="px-3 py-2">
+                    <CopyProtocolCell protocol={request.protocol} />
+                  </td>
                   <td className="px-3 py-2 text-slate-200">{request.citizen.fullName}</td>
                   <td className="px-3 py-2 text-slate-300">{request.citizen.documentNumber}</td>
                   <td className="px-3 py-2 text-slate-300">{request.template.title}</td>
-                  <td className="px-3 py-2 text-slate-200">{request.status}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     {request.isFinalized ? (
-                      <span className="rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200">
                         Finalizado
                       </span>
                     ) : request.currentStepOrder !== null ? (
-                      <span className="rounded-full border border-sky-500/35 bg-sky-500/20 px-2 py-1 text-xs text-sky-200">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-sky-500/35 bg-sky-500/20 px-2 py-1 text-xs text-sky-200">
                         Em andamento
                       </span>
                     ) : (
-                      <span className="rounded-full border border-amber-500/35 bg-amber-500/20 px-2 py-1 text-xs text-amber-200">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-amber-500/35 bg-amber-500/20 px-2 py-1 text-xs text-amber-200">
                         Em transicao
                       </span>
                     )}
@@ -211,21 +260,71 @@ export default async function ServiceRequestsPage({ searchParams }: Props) {
                     }).format(request.createdAt)}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      {canReadRequestDetails ? (
-                        <Link href={`/requests/${request.id}`} className="btn-secondary text-xs">
-                          Detalhes
-                        </Link>
+                    {(() => {
+                      const workflowSteps =
+                        request.submission.workflowSteps.length > 0
+                          ? request.submission.workflowSteps
+                          : request.workflowInstance?.steps;
+
+                      const currentStep = resolveCurrentWorkflowStep(
+                        workflowSteps,
+                        request.currentStepOrder,
+                      );
+                      const canApproveCurrentStep = canActOnCurrentStep(authUser, currentStep);
+
+                      const actionOptions: Array<{
+                        value: string;
+                        label: string;
+                        href: string;
+                        openInNewTab?: boolean;
+                      }> = [];
+
+                      if (canApproveCurrentStep && canExecuteSubmissionWorkflow && canOpenWorkflowDetails) {
+                        actionOptions.push({
+                          value: "approve",
+                          label: "Aprovar solicitacao",
+                          href: `/submissions/${request.submissionId}/workflow`,
+                        });
+                      }
+
+                      if (canShowDetailsAction) {
+                        actionOptions.push({
+                          value: "details",
+                          label: "Detalhes",
+                          href: canReadRequestDetails
+                            ? `/requests/${request.id}`
+                            : `/submissions/${request.submissionId}/workflow`,
+                        });
+                      }
+
+                      if (
+                        canDownloadDeclaration &&
+                        (request.submission.workflowStatus === "FINAL_APPROVED" ||
+                          request.submission.workflowStatus === "FINAL_REJECTED")
+                      ) {
+                        actionOptions.push({
+                          value: "pdf",
+                          label: "Baixar PDF",
+                          href: `/api/requests/${request.id}/declaration`,
+                          openInNewTab: true,
+                        });
+                      }
+
+                      const requestIsActive = (request as { isActive?: boolean }).isActive !== false;
+                      const canInactivateRequest = isSuperAdmin && requestIsActive && request.status !== "CANCELLED";
+                      const canDeleteRequest = isSuperAdmin;
+
+                      return actionOptions.length > 0 || canInactivateRequest || canDeleteRequest ? (
+                        <RequestRowActionsSelect
+                          requestId={request.id}
+                          options={actionOptions}
+                          canInactivate={canInactivateRequest}
+                          canDelete={canDeleteRequest}
+                        />
                       ) : (
                         <span className="text-xs text-slate-500">Sem acesso</span>
-                      )}
-                      {request.submission.workflowStatus === "FINAL_APPROVED" ||
-                      request.submission.workflowStatus === "FINAL_REJECTED" ? (
-                        <a href={`/api/requests/${request.id}/declaration`} className="btn-primary text-xs">
-                          Baixar PDF
-                        </a>
-                      ) : null}
-                    </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

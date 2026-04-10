@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { initializeSubmissionWorkflow } from "@/infra/repositories/workflowRepository";
+import { findActiveDocumentRestriction } from "@/infra/repositories/licensesRepository";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "@/lib/errors";
 import { validateSubmissionAnswers } from "@/application/laudos/publicSubmissionValidation";
+import { canViewRequest, resolveCurrentWorkflowStep } from "@/auth/workflowAccess";
+import type { AuthUser } from "@/auth/session";
 
 function normalizeDocument(document: string) {
   return document.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
@@ -37,13 +40,22 @@ type ListServiceRequestsInput = {
   judgeQueue?: boolean;
 };
 
+type ListServiceRequestsOptions = {
+  authUser?: AuthUser | null;
+};
+
 type CreateServiceRequestInput = {
   protocol: string;
   templateId: string;
   createdById: string;
   createdByName: string;
   createdByEmail: string;
-  createdByPassportNumber: string;
+  citizenName: string;
+  citizenDocument: string;
+  citizenContact: string;
+  requesterName: string;
+  requesterDocument: string;
+  requesterOabNumber?: string;
   answers: Record<string, unknown>;
 };
 
@@ -66,6 +78,8 @@ function parseRoleKeys(value: unknown): string[] {
 
   return value.filter((item): item is string => typeof item === "string");
 }
+
+const NOT_DELETED_FILTER = { isDeleted: false } as unknown as Prisma.ServiceRequestWhereInput;
 
 export async function listServiceRequestTemplateOptions() {
   return prisma.reportTemplate.findMany({
@@ -94,9 +108,35 @@ export async function listServiceRequestTemplateOptions() {
 }
 
 export async function createServiceRequest(input: CreateServiceRequestInput) {
-  const citizenName = input.createdByName;
-  const citizenDocument = input.createdByPassportNumber;
-  const citizenContact = input.createdByEmail || `Passaporte ${input.createdByPassportNumber}`;
+  const citizenName = input.citizenName;
+  const citizenDocument = input.citizenDocument;
+  const citizenContact = input.citizenContact;
+  const requesterName = input.requesterName;
+  const requesterDocument = input.requesterDocument;
+  const requesterOabNumber = input.requesterOabNumber ?? null;
+
+  const activeRestriction = await findActiveDocumentRestriction(citizenDocument);
+
+  if (activeRestriction) {
+    const expiryLabel = activeRestriction.isPermanent
+      ? "de forma definitiva"
+      : activeRestriction.endsAt
+        ? `ate ${new Intl.DateTimeFormat("pt-BR", {
+            dateStyle: "short",
+            timeStyle: "short",
+          }).format(activeRestriction.endsAt)}`
+        : "por prazo ativo";
+
+    throw new AppError(
+      `Documento impedido de abrir nova solicitacao ${expiryLabel}. Licenca vinculada: ${activeRestriction.releasedLicense.licenseNumber}.`,
+      409,
+      {
+        restrictionId: activeRestriction.id,
+        endsAt: activeRestriction.endsAt,
+        isPermanent: activeRestriction.isPermanent,
+      },
+    );
+  }
 
   const template = await prisma.reportTemplate.findFirst({
     where: {
@@ -178,16 +218,17 @@ export async function createServiceRequest(input: CreateServiceRequestInput) {
       data: {
         templateId: template.id,
         protocol: input.protocol,
-        submittedByName: input.createdByName,
-        submittedByContact: `Passaporte ${input.createdByPassportNumber}`,
+        submittedByName: citizenName,
+        submittedByContact: citizenContact,
         answers: validation.data as Prisma.InputJsonValue,
         meta: {
           source: "service_request",
           citizenDocument,
           openedBy: {
             userId: input.createdById,
-            name: input.createdByName,
-            passportNumber: input.createdByPassportNumber,
+            name: requesterName,
+            passportNumber: requesterDocument,
+            oabNumber: requesterOabNumber,
           },
         } as Prisma.InputJsonValue,
       },
@@ -233,6 +274,9 @@ export async function createServiceRequest(input: CreateServiceRequestInput) {
         citizenName,
         citizenDocument,
         citizenContact,
+        requesterName,
+        requesterDocument,
+        requesterOabNumber,
         initialNotes: null,
         status: "IN_PROGRESS",
         currentStepOrder: initializedWorkflow.firstStepOrder,
@@ -318,8 +362,13 @@ export async function createServiceRequest(input: CreateServiceRequestInput) {
   });
 }
 
-export async function listServiceRequestsPaginated(input: ListServiceRequestsInput) {
+export async function listServiceRequestsPaginated(
+  input: ListServiceRequestsInput,
+  options: ListServiceRequestsOptions = {},
+) {
   const andClauses: Prisma.ServiceRequestWhereInput[] = [];
+
+  andClauses.push(NOT_DELETED_FILTER);
 
   if (input.protocol) {
     andClauses.push({
@@ -422,73 +471,145 @@ export async function listServiceRequestsPaginated(input: ListServiceRequestsInp
   const where: Prisma.ServiceRequestWhereInput =
     andClauses.length > 0 ? { AND: andClauses } : {};
 
-  const skip = (input.page - 1) * input.pageSize;
-
-  const [requests, total] = await prisma.$transaction([
-    prisma.serviceRequest.findMany({
-      where,
-      skip,
-      take: input.pageSize,
-      orderBy: { createdAt: "desc" },
-      include: {
-        citizen: {
-          select: {
-            id: true,
-            fullName: true,
-            documentNumber: true,
-            phone: true,
-          },
-        },
-        template: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-          },
-        },
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        submission: {
-          select: {
-            id: true,
-            workflowStatus: true,
-            currentStepOrder: true,
-          },
-        },
-        workflowInstance: {
-          select: {
-            id: true,
-            status: true,
-            currentStepOrder: true,
-            steps: {
+  const requestInclude = {
+    citizen: {
+      select: {
+        id: true,
+        fullName: true,
+        documentNumber: true,
+        phone: true,
+      },
+    },
+    template: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+      },
+    },
+    createdBy: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+    submission: {
+      select: {
+        id: true,
+        workflowStatus: true,
+        currentStepOrder: true,
+            workflowSteps: {
               select: {
-                stepOrder: true,
-                stepName: true,
+                order: true,
+                name: true,
                 status: true,
+                authorizedRoleKeys: true,
+                requiredPermissions: true,
               },
             },
+      },
+    },
+    workflowInstance: {
+      select: {
+        id: true,
+        status: true,
+        currentStepOrder: true,
+        steps: {
+          select: {
+            stepOrder: true,
+            stepName: true,
+            status: true,
+            authorizedRoleKeys: true,
           },
         },
       },
-    }),
-    prisma.serviceRequest.count({ where }),
-  ]);
+    },
+  } as const;
+
+  const user = options.authUser ?? null;
+  const skip = (input.page - 1) * input.pageSize;
+  const requiresScopedVisibility = Boolean(user);
+
+  const [requests, total] = requiresScopedVisibility
+    ? await (async () => {
+        const allRequests = await prisma.serviceRequest.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          include: requestInclude,
+        });
+
+        const mappedAllRequests = allRequests.map((request) => {
+          const resolvedCurrentStepOrder =
+            request.currentStepOrder ??
+            request.submission.currentStepOrder ??
+            request.workflowInstance?.currentStepOrder ??
+            null;
+
+          const resolvedCurrentStep = resolveCurrentWorkflowStep(
+            request.workflowInstance?.steps,
+            resolvedCurrentStepOrder,
+          );
+
+          const finalized =
+            isFinalizedStatus(request.status) ||
+            request.submission.workflowStatus === "FINAL_APPROVED" ||
+            request.submission.workflowStatus === "FINAL_REJECTED";
+
+          return {
+            ...request,
+            currentStepOrder: resolvedCurrentStepOrder,
+            currentStepName:
+              (resolvedCurrentStep as { stepName?: string; name?: string } | null)?.stepName ??
+              (resolvedCurrentStep as { stepName?: string; name?: string } | null)?.name ??
+              null,
+            isFinalized: finalized,
+          };
+        });
+
+        const visibleRequests = mappedAllRequests.filter((request) =>
+          canViewRequest(user, {
+            createdById: request.createdById,
+            currentStepOrder: request.currentStepOrder,
+            workflowStatus: request.submission.workflowStatus,
+              workflowSteps:
+                request.submission.workflowSteps.length > 0
+                  ? request.submission.workflowSteps
+                  : request.workflowInstance?.steps,
+          }),
+        );
+
+        const paginatedRequests = visibleRequests.slice(skip, skip + input.pageSize);
+        return [paginatedRequests, visibleRequests.length] as const;
+      })()
+    : await prisma.$transaction([
+        prisma.serviceRequest.findMany({
+          where,
+          skip,
+          take: input.pageSize,
+          orderBy: { createdAt: "desc" },
+          include: requestInclude,
+        }),
+        prisma.serviceRequest.count({ where }),
+      ]);
 
   const mappedRequests = requests.map((request) => {
-    const inProgressStep = request.workflowInstance?.steps.find((step) => step.status === "IN_PROGRESS") ?? null;
-
     const resolvedCurrentStepOrder =
       request.currentStepOrder ??
       request.submission.currentStepOrder ??
       request.workflowInstance?.currentStepOrder ??
-      inProgressStep?.stepOrder ??
       null;
 
-    const resolvedCurrentStepName = inProgressStep?.stepName ?? null;
+    const resolvedCurrentStep = resolveCurrentWorkflowStep(
+      request.submission.workflowSteps.length > 0
+        ? request.submission.workflowSteps
+        : request.workflowInstance?.steps,
+      resolvedCurrentStepOrder,
+    );
+
+    const resolvedCurrentStepName =
+      (resolvedCurrentStep as { stepName?: string; name?: string } | null)?.stepName ??
+      (resolvedCurrentStep as { stepName?: string; name?: string } | null)?.name ??
+      null;
     const finalized =
       isFinalizedStatus(request.status) ||
       request.submission.workflowStatus === "FINAL_APPROVED" ||
@@ -517,7 +638,7 @@ export async function listServiceRequestsPaginated(input: ListServiceRequestsInp
   };
 }
 
-export async function getOperatorDashboardSummary(createdById: string) {
+export async function getOperatorDashboardSummary() {
   const now = new Date();
   const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(now.getDate() - 7);
@@ -534,7 +655,7 @@ export async function getOperatorDashboardSummary(createdById: string) {
     cancelledCount,
   ] = await prisma.$transaction([
     prisma.serviceRequest.findMany({
-      where: { createdById },
+      where: NOT_DELETED_FILTER,
       orderBy: { createdAt: "desc" },
       take: 8,
       include: {
@@ -551,51 +672,61 @@ export async function getOperatorDashboardSummary(createdById: string) {
         },
       },
     }),
-    prisma.serviceRequest.count({
-      where: { createdById },
-    }),
+    prisma.serviceRequest.count({ where: NOT_DELETED_FILTER }),
     prisma.serviceRequest.count({
       where: {
-        createdById,
+        AND: [
+          NOT_DELETED_FILTER,
+          {
         createdAt: {
           gte: sevenDaysAgo,
         },
+          },
+        ],
       },
     }),
-    prisma.serviceRequest.count({ where: { createdById, status: "OPEN" } }),
-    prisma.serviceRequest.count({ where: { createdById, status: "IN_PROGRESS" } }),
-    prisma.serviceRequest.count({ where: { createdById, status: "PENDING" } }),
+    prisma.serviceRequest.count({ where: { AND: [NOT_DELETED_FILTER, { status: "OPEN" }] } }),
+    prisma.serviceRequest.count({ where: { AND: [NOT_DELETED_FILTER, { status: "IN_PROGRESS" }] } }),
+    prisma.serviceRequest.count({ where: { AND: [NOT_DELETED_FILTER, { status: "PENDING" }] } }),
     prisma.serviceRequest.count({
       where: {
-        createdById,
-        OR: [
-          { status: "FINAL_APPROVED" },
+        AND: [
+          NOT_DELETED_FILTER,
           {
-            submission: {
-              is: {
-                workflowStatus: "FINAL_APPROVED",
+            OR: [
+              { status: "FINAL_APPROVED" },
+              {
+                submission: {
+                  is: {
+                    workflowStatus: "FINAL_APPROVED",
+                  },
+                },
               },
-            },
+            ],
           },
         ],
       },
     }),
     prisma.serviceRequest.count({
       where: {
-        createdById,
-        OR: [
-          { status: "FINAL_REJECTED" },
+        AND: [
+          NOT_DELETED_FILTER,
           {
-            submission: {
-              is: {
-                workflowStatus: "FINAL_REJECTED",
+            OR: [
+              { status: "FINAL_REJECTED" },
+              {
+                submission: {
+                  is: {
+                    workflowStatus: "FINAL_REJECTED",
+                  },
+                },
               },
-            },
+            ],
           },
         ],
       },
     }),
-    prisma.serviceRequest.count({ where: { createdById, status: "CANCELLED" } }),
+    prisma.serviceRequest.count({ where: { AND: [NOT_DELETED_FILTER, { status: "CANCELLED" }] } }),
   ]);
 
   const countsByStatus: Record<ServiceRequestStatus, number> = {
@@ -626,12 +757,17 @@ export async function getRoleOpenPipelineDashboardSummary(roleKey: string) {
   const [requests, finalizedRequests] = await prisma.$transaction([
     prisma.serviceRequest.findMany({
       where: {
-        status: {
-          in: openStatuses,
-        },
-        workflowInstance: {
-          isNot: null,
-        },
+        AND: [
+          NOT_DELETED_FILTER,
+          {
+            status: {
+              in: openStatuses,
+            },
+            workflowInstance: {
+              isNot: null,
+            },
+          },
+        ],
       },
       orderBy: { createdAt: "desc" },
       include: {
@@ -662,25 +798,30 @@ export async function getRoleOpenPipelineDashboardSummary(roleKey: string) {
     }),
     prisma.serviceRequest.findMany({
       where: {
-        OR: [
+        AND: [
+          NOT_DELETED_FILTER,
           {
-            status: {
-              in: finalizedStatuses,
-            },
-          },
-          {
-            submission: {
-              is: {
-                workflowStatus: {
-                  in: ["FINAL_APPROVED", "FINAL_REJECTED"],
+            OR: [
+              {
+                status: {
+                  in: finalizedStatuses,
                 },
               },
+              {
+                submission: {
+                  is: {
+                    workflowStatus: {
+                      in: ["FINAL_APPROVED", "FINAL_REJECTED"],
+                    },
+                  },
+                },
+              },
+            ],
+            workflowInstance: {
+              isNot: null,
             },
           },
         ],
-        workflowInstance: {
-          isNot: null,
-        },
       },
       select: {
         status: true,
@@ -784,11 +925,32 @@ export async function getRoleOpenPipelineDashboardSummary(roleKey: string) {
 }
 
 export async function getServiceRequestById(id: string) {
-  return prisma.serviceRequest.findUnique({
+  return prisma.serviceRequest.findFirst({
     where: {
-      id,
+      AND: [
+        { id },
+        NOT_DELETED_FILTER,
+      ],
     },
-    include: {
+    select: {
+      id: true,
+      protocol: true,
+      citizenName: true,
+      citizenDocument: true,
+      citizenContact: true,
+      requesterName: true,
+      requesterDocument: true,
+      requesterOabNumber: true,
+      initialNotes: true,
+      isActive: true,
+      isDeleted: true,
+      inactivatedAt: true,
+      deletedAt: true,
+      status: true,
+      currentStepOrder: true,
+      submissionId: true,
+      createdById: true,
+      createdAt: true,
       citizen: {
         select: {
           id: true,
@@ -860,5 +1022,226 @@ export async function getServiceRequestById(id: string) {
         },
       },
     },
+  });
+}
+
+export async function getServiceRequestBySubmissionId(submissionId: string) {
+  return prisma.serviceRequest.findFirst({
+    where: {
+      submissionId,
+      AND: [NOT_DELETED_FILTER],
+    },
+    include: {
+      template: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+        },
+      },
+      releasedLicense: {
+        select: {
+          id: true,
+          licenseNumber: true,
+          protocol: true,
+          citizenName: true,
+          citizenDocument: true,
+          releasedAt: true,
+        },
+      },
+    },
+  });
+}
+
+export async function inactivateServiceRequest(id: string, changedByUserId: string) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.serviceRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        isActive: true,
+        isDeleted: true,
+        submissionId: true,
+        workflowInstance: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new AppError("Solicitacao nao encontrada", 404);
+    }
+
+    if (request.isDeleted) {
+      throw new AppError("Solicitacao excluida", 409);
+    }
+
+    if (!request.isActive || request.status === "CANCELLED") {
+      throw new AppError("Solicitacao ja inativada", 409);
+    }
+
+    const now = new Date();
+
+    await tx.serviceRequest.update({
+      where: { id: request.id },
+      data: {
+        isActive: false,
+        inactivatedAt: now,
+        inactivatedByUserId: changedByUserId,
+        status: "CANCELLED",
+        currentStepOrder: null,
+      },
+    });
+
+    await tx.reportSubmission.update({
+      where: { id: request.submissionId },
+      data: {
+        workflowStatus: "FINAL_REJECTED",
+        currentStepOrder: null,
+        workflowCompletedAt: now,
+      },
+    });
+
+    if (request.workflowInstance?.id) {
+      await tx.requestWorkflowInstance.update({
+        where: { id: request.workflowInstance.id },
+        data: {
+          status: "CANCELLED",
+          currentStepOrder: null,
+          completedAt: now,
+        },
+      });
+
+      await tx.requestWorkflowStep.updateMany({
+        where: {
+          workflowInstanceId: request.workflowInstance.id,
+          status: {
+            in: ["WAITING", "IN_PROGRESS"],
+          },
+        },
+        data: {
+          status: "BLOCKED",
+          observations: "Etapas bloqueadas por inativacao da solicitacao.",
+        },
+      });
+    }
+
+    await tx.requestStatusHistory.create({
+      data: {
+        serviceRequestId: request.id,
+        fromStatus: request.status,
+        toStatus: "CANCELLED",
+        source: "MANUAL",
+        reason: "Solicitacao inativada por super_admin",
+        changedByUserId,
+        workflowInstanceId: request.workflowInstance?.id ?? null,
+      },
+    });
+
+    return tx.serviceRequest.findUnique({
+      where: { id: request.id },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  });
+}
+
+export async function deleteServiceRequest(id: string, deletedByUserId: string) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.serviceRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        isDeleted: true,
+        workflowInstance: {
+          select: {
+            id: true,
+          },
+        },
+        submissionId: true,
+      },
+    });
+
+    if (!request) {
+      throw new AppError("Solicitacao nao encontrada", 404);
+    }
+
+    if (request.isDeleted) {
+      throw new AppError("Solicitacao ja excluida", 409);
+    }
+
+    const now = new Date();
+
+    await tx.serviceRequest.update({
+      where: {
+        id: request.id,
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: now,
+        deletedByUserId,
+        isActive: false,
+        inactivatedAt: now,
+        inactivatedByUserId: deletedByUserId,
+        status: "CANCELLED",
+        currentStepOrder: null,
+      },
+    });
+
+    await tx.reportSubmission.update({
+      where: { id: request.submissionId },
+      data: {
+        workflowStatus: "FINAL_REJECTED",
+        currentStepOrder: null,
+        workflowCompletedAt: now,
+      },
+    });
+
+    if (request.workflowInstance?.id) {
+      await tx.requestWorkflowInstance.update({
+        where: { id: request.workflowInstance.id },
+        data: {
+          status: "CANCELLED",
+          currentStepOrder: null,
+          completedAt: now,
+        },
+      });
+
+      await tx.requestWorkflowStep.updateMany({
+        where: {
+          workflowInstanceId: request.workflowInstance.id,
+          status: {
+            in: ["WAITING", "IN_PROGRESS"],
+          },
+        },
+        data: {
+          status: "BLOCKED",
+          observations: "Etapas bloqueadas por exclusao da solicitacao.",
+        },
+      });
+    }
+
+    await tx.requestStatusHistory.create({
+      data: {
+        serviceRequestId: request.id,
+        fromStatus: request.status,
+        toStatus: "CANCELLED",
+        source: "MANUAL",
+        reason: "Solicitacao excluida por super_admin",
+        changedByUserId: deletedByUserId,
+        workflowInstanceId: request.workflowInstance?.id ?? null,
+      },
+    });
+
+    return {
+      id: request.id,
+      deleted: true,
+    };
   });
 }

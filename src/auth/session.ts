@@ -25,6 +25,7 @@ export type AuthUser = {
   name: string;
   email: string;
   passportNumber: string;
+  oabNumber: string | null;
   roles: RoleKey[];
   permissions: Permission[];
 };
@@ -135,6 +136,7 @@ export async function resolveAuthUser(identity: AuthIdentity): Promise<AuthUser 
     name: profile.name,
     email: profile.email,
     passportNumber: profile.passportNumber,
+    oabNumber: profile.oabNumber,
     roles,
     permissions,
   };

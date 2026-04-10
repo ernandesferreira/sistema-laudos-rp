@@ -1,6 +1,6 @@
 import { hasPermission, isSuperAdmin } from "@/auth/authorization";
 import type { AuthUser } from "@/auth/session";
-import { normalizeRoleKeys } from "@/auth/roles";
+import { isUserAuthorizedForStep } from "@/auth/workflowAccess";
 import { AppError } from "@/lib/errors";
 
 export function assertUserCanExecuteStep(user: AuthUser, authorizedRoleKeys: string[]) {
@@ -12,8 +12,7 @@ export function assertUserCanExecuteStep(user: AuthUser, authorizedRoleKeys: str
     throw new AppError("Forbidden", 403);
   }
 
-  const normalized = normalizeRoleKeys(authorizedRoleKeys);
-  const hasRole = normalized.some((role) => user.roles.includes(role));
+  const hasRole = isUserAuthorizedForStep(user.roles, authorizedRoleKeys);
 
   if (!hasRole) {
     throw new AppError("Usuario sem perfil autorizado para esta etapa", 403);

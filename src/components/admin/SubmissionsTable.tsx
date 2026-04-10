@@ -1,11 +1,28 @@
 import Link from "next/link";
+import { canActOnCurrentStep, canViewSubmission, resolveCurrentWorkflowStep } from "@/auth/workflowAccess";
+import type { AuthUser } from "@/auth/session";
+import { RowActionsSelect } from "@/components/shared/RowActionsSelect";
+import { CopyProtocolCell } from "@/components/shared/CopyProtocolCell";
 
 type SubmissionItem = {
   id: string;
   protocol: string | null;
   status: "PENDING" | "REVIEWED" | "ARCHIVED";
+  workflowStatus: string;
+  currentStepOrder: number | null;
   submittedByName: string | null;
   createdAt: Date;
+  workflowSteps: {
+    id: string;
+    order: number;
+    name: string;
+    status: string;
+    authorizedRoleKeys: unknown;
+    requiredPermissions: unknown;
+  }[];
+  serviceRequest: {
+    createdById: string;
+  } | null;
   template: {
     id: string;
     title: string;
@@ -37,6 +54,7 @@ type SubmissionsTableProps = {
   pagination: PaginationMeta;
   filters: ActiveFilters;
   canViewDetails: boolean;
+  currentUser: AuthUser | null;
 };
 
 function statusLabel(status: SubmissionItem["status"]) {
@@ -118,7 +136,13 @@ function buildPageHref(page: number, filters: ActiveFilters) {
   return `/submissions?${params.toString()}`;
 }
 
-export function SubmissionsTable({ submissions, pagination, filters, canViewDetails }: SubmissionsTableProps) {
+export function SubmissionsTable({
+  submissions,
+  pagination,
+  filters,
+  canViewDetails,
+  currentUser,
+}: SubmissionsTableProps) {
   const pages = pageList(pagination.page, pagination.totalPages);
 
   return (
@@ -139,6 +163,21 @@ export function SubmissionsTable({ submissions, pagination, filters, canViewDeta
             <tbody>
               {submissions.map((submission) => (
                 <tr key={submission.id} className="border-b border-slate-800 last:border-b-0 hover:bg-slate-900/55">
+                  {(() => {
+                    const currentStep = resolveCurrentWorkflowStep(
+                      submission.workflowSteps,
+                      submission.currentStepOrder,
+                    );
+                    const canViewThisSubmission = canViewSubmission(currentUser, {
+                      createdById: submission.serviceRequest?.createdById ?? null,
+                      currentStepOrder: submission.currentStepOrder,
+                      workflowStatus: submission.workflowStatus,
+                      workflowSteps: submission.workflowSteps,
+                    });
+                    const canActThisSubmission = canActOnCurrentStep(currentUser, currentStep);
+
+                    return (
+                      <>
                   <td className="px-3 py-3 align-top">
                     <p className="font-semibold text-slate-100">{submission.template.title}</p>
                     <p className="text-xs text-slate-400">/{submission.template.slug}</p>
@@ -149,15 +188,19 @@ export function SubmissionsTable({ submissions, pagination, filters, canViewDeta
                       Nome: {submission.submittedByName ?? "Nao informado"}
                     </p>
                   </td>
-                  <td className="hidden px-3 py-3 text-xs text-slate-300 md:table-cell">
-                    {submission.protocol ?? "N/A"}
+                  <td className="hidden px-3 py-3 md:table-cell">
+                    {submission.protocol ? (
+                      <CopyProtocolCell protocol={submission.protocol} className="inline-flex items-center gap-2 whitespace-nowrap text-xs" />
+                    ) : (
+                      <span className="text-xs text-slate-300">N/A</span>
+                    )}
                   </td>
                   <td className="hidden px-3 py-3 text-slate-300 lg:table-cell">
                     {submission.submittedByName ?? "Nao informado"}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3 whitespace-nowrap">
                     <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClassName(submission.status)}`}
+                      className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${statusClassName(submission.status)}`}
                     >
                       {statusLabel(submission.status)}
                     </span>
@@ -169,14 +212,41 @@ export function SubmissionsTable({ submissions, pagination, filters, canViewDeta
                     }).format(submission.createdAt)}
                   </td>
                   <td className="px-3 py-3 text-right">
-                    {canViewDetails ? (
-                      <Link href={`/submissions/${submission.id}`} className="btn-secondary">
-                        Detalhes
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-slate-500">Sem acesso</span>
-                    )}
+                    {(() => {
+                      const actionOptions: Array<{
+                        value: string;
+                        label: string;
+                        href: string;
+                      }> = [];
+
+                      if (canActThisSubmission) {
+                        actionOptions.push({
+                          value: "approve",
+                          label: "Aprovar submissao",
+                          href: `/submissions/${submission.id}/workflow`,
+                        });
+                      }
+
+                      if (canViewDetails && canViewThisSubmission) {
+                        actionOptions.push({
+                          value: "details",
+                          label: "Detalhes",
+                          href: `/submissions/${submission.id}`,
+                        });
+                      }
+
+                      return actionOptions.length > 0 ? (
+                        <div className="flex justify-end">
+                          <RowActionsSelect options={actionOptions} />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">Sem acesso</span>
+                      );
+                    })()}
                   </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               ))}
             </tbody>

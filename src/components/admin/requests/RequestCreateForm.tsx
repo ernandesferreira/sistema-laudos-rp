@@ -13,6 +13,11 @@ type TemplateOption = {
 
 type RequestCreateFormProps = {
   templateOptions: TemplateOption[];
+  requesterDefaults: {
+    name: string;
+    document: string;
+    oabNumber: string;
+  };
 };
 
 type TemplateField = {
@@ -64,7 +69,17 @@ function getFieldContainerClass(type: FieldType) {
   return "";
 }
 
-export function RequestCreateForm({ templateOptions }: RequestCreateFormProps) {
+function formatPhoneMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 6);
+
+  if (digits.length <= 3) {
+    return digits;
+  }
+
+  return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+}
+
+export function RequestCreateForm({ templateOptions, requesterDefaults }: RequestCreateFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
@@ -73,11 +88,24 @@ export function RequestCreateForm({ templateOptions }: RequestCreateFormProps) {
   const [sections, setSections] = useState<TemplateSection[]>([]);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [form, setForm] = useState({
+    citizenName: "",
+    citizenDocument: "",
+    citizenContact: "",
+    requesterName: requesterDefaults.name,
+    requesterDocument: requesterDefaults.document,
+    requesterOabNumber: requesterDefaults.oabNumber,
     templateId: templateOptions[0]?.id ?? "",
   });
 
   const isDisabled = useMemo(() => {
-    return isSubmitting || isLoadingTemplate || !form.templateId;
+    return (
+      isSubmitting ||
+      isLoadingTemplate ||
+      !form.templateId ||
+      form.citizenName.trim().length < 3 ||
+      form.citizenDocument.trim().length < 3 ||
+      form.citizenContact.trim().length < 3
+    );
   }, [form, isLoadingTemplate, isSubmitting]);
 
   useEffect(() => {
@@ -162,6 +190,15 @@ export function RequestCreateForm({ templateOptions }: RequestCreateFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          citizenName: form.citizenName.trim(),
+          citizenDocument: form.citizenDocument.trim().toUpperCase(),
+          citizenContact: form.citizenContact.trim(),
+          requesterName: form.requesterName.trim(),
+          requesterDocument: form.requesterDocument.trim().toUpperCase(),
+          requesterOabNumber:
+            form.requesterOabNumber.trim().length > 0
+              ? form.requesterOabNumber.trim().toUpperCase()
+              : undefined,
           templateId: form.templateId,
           answers,
         }),
@@ -194,7 +231,63 @@ export function RequestCreateForm({ templateOptions }: RequestCreateFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 p-4 md:p-6">
-      <div className="grid gap-4 md:grid-cols-1">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-100">Dados do Cidadao</h2>
+          <p className="text-xs text-slate-300">Pessoa que recebera o resultado da solicitacao.</p>
+        </div>
+
+        <label className="space-y-1 md:col-span-2">
+          <span className="text-xs uppercase text-slate-200">Nome do Cidadao *</span>
+          <input
+            value={form.citizenName}
+            onChange={(event) => setForm((prev) => ({ ...prev, citizenName: event.target.value }))}
+            className="input"
+            placeholder="informe Nome e Sobre nome"
+            required
+          />
+          {fieldErrors.citizenName ? <p className="text-xs text-rose-300">{fieldErrors.citizenName}</p> : null}
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-xs uppercase text-slate-200">Passaporte *</span>
+          <input
+            value={form.citizenDocument}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                citizenDocument: event.target.value.toUpperCase(),
+              }))
+            }
+            className="input"
+            placeholder="ex.: 12345"
+            required
+          />
+          {fieldErrors.citizenDocument ? (
+            <p className="text-xs text-rose-300">{fieldErrors.citizenDocument}</p>
+          ) : null}
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-xs uppercase text-slate-200">Telefone de Contato *</span>
+          <input
+            value={form.citizenContact}
+            onChange={(event) =>
+              setForm((prev) => ({
+                ...prev,
+                citizenContact: formatPhoneMask(event.target.value),
+              }))
+            }
+            className="input"
+            placeholder="000-000"
+            maxLength={7}
+            required
+          />
+          {fieldErrors.citizenContact ? (
+            <p className="text-xs text-rose-300">{fieldErrors.citizenContact}</p>
+          ) : null}
+        </label>
+
         <label className="space-y-1">
           <span className="text-xs uppercase text-slate-200">Modelo de solicitacao</span>
           <select
@@ -281,7 +374,7 @@ export function RequestCreateForm({ templateOptions }: RequestCreateFormProps) {
       <div className="sticky bottom-0 -mx-4 border-t border-slate-800/70 bg-slate-950/95 p-4 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
         <div className="flex items-center justify-end gap-2">
           <button type="submit" className="btn-primary w-full md:w-auto" disabled={isDisabled}>
-          {isSubmitting ? "Abrindo..." : "Abrir solicitacao"}
+            {isSubmitting ? "Abrindo..." : "Abrir solicitacao"}
           </button>
         </div>
       </div>

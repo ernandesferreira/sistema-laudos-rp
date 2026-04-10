@@ -50,7 +50,7 @@ export default async function UsersPage({ searchParams }: Props) {
           type="text"
           name="search"
           defaultValue={search ?? ""}
-          placeholder="Buscar por nome ou passaporte"
+          placeholder="Buscar por nome, passaporte ou OAB"
           className="input"
         />
         <button type="submit" className="btn-primary">
@@ -68,11 +68,12 @@ export default async function UsersPage({ searchParams }: Props) {
         />
       ) : (
         <article className="card overflow-hidden">
-          <table className="w-full min-w-[920px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-slate-900/60 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-2">Nome</th>
                 <th className="px-3 py-2">Passaporte</th>
+                <th className="px-3 py-2">OAB</th>
                 <th className="px-3 py-2">Email</th>
                 <th className="px-3 py-2">Perfis</th>
                 <th className="px-3 py-2">Status</th>
@@ -85,17 +86,18 @@ export default async function UsersPage({ searchParams }: Props) {
                 <tr key={user.id} className="border-t border-slate-800/70 align-top">
                   <td className="px-3 py-2 text-slate-100">{user.name}</td>
                   <td className="px-3 py-2 text-slate-300">{user.passportNumber}</td>
+                  <td className="px-3 py-2 text-slate-300">{user.oabNumber ?? "-"}</td>
                   <td className="px-3 py-2 text-slate-300">{user.email}</td>
                   <td className="px-3 py-2 text-slate-300">
                     {user.roles.map((entry) => entry.role.name).join(", ") || "Sem perfil"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     {user.isActive ? (
-                      <span className="rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-emerald-500/35 bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200">
                         Ativo
                       </span>
                     ) : (
-                      <span className="rounded-full border border-slate-600 bg-slate-700/40 px-2 py-1 text-xs text-slate-200">
+                      <span className="inline-flex whitespace-nowrap rounded-full border border-slate-600 bg-slate-700/40 px-2 py-1 text-xs text-slate-200">
                         Inativo
                       </span>
                     )}

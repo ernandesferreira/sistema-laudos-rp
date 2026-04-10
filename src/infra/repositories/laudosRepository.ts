@@ -3,6 +3,8 @@ import { AppError } from "@/lib/errors";
 import type { Prisma } from "@prisma/client";
 import type { SubmissionStatus, TemplateStatus } from "@prisma/client";
 import { initializeSubmissionWorkflow } from "@/infra/repositories/workflowRepository";
+import { canViewSubmission, resolveCurrentWorkflowStep } from "@/auth/workflowAccess";
+import type { AuthUser } from "@/auth/session";
 
 const ARCHIVED_SECTION_TAG = "[SECTION_ARCHIVED]";
 
@@ -57,6 +59,10 @@ type ListSubmissionsInput = {
   status?: SubmissionStatus;
   dateFrom?: string;
   dateTo?: string;
+};
+
+type ListSubmissionsOptions = {
+  authUser?: AuthUser | null;
 };
 
 type SectionInput = {
@@ -488,8 +494,8 @@ export async function createSubmission(params: {
   });
 }
 
-export async function listSubmissions() {
-  return prisma.reportSubmission.findMany({
+export async function listSubmissions(options: ListSubmissionsOptions = {}) {
+  const submissions = await prisma.reportSubmission.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       template: {
@@ -499,11 +505,44 @@ export async function listSubmissions() {
           slug: true,
         },
       },
+      workflowSteps: {
+        select: {
+          id: true,
+          order: true,
+          name: true,
+          status: true,
+          authorizedRoleKeys: true,
+          requiredPermissions: true,
+        },
+      },
+      serviceRequest: {
+        select: {
+          createdById: true,
+        },
+      },
     },
   });
+
+  const user = options.authUser ?? null;
+
+  if (!user) {
+    return submissions;
+  }
+
+  return submissions.filter((submission) =>
+    canViewSubmission(user, {
+      createdById: submission.serviceRequest?.createdById ?? null,
+      currentStepOrder: submission.currentStepOrder,
+      workflowStatus: submission.workflowStatus,
+      workflowSteps: submission.workflowSteps,
+    }),
+  );
 }
 
-export async function listSubmissionsPaginated(input: ListSubmissionsInput) {
+export async function listSubmissionsPaginated(
+  input: ListSubmissionsInput,
+  options: ListSubmissionsOptions = {},
+) {
   const where: Prisma.ReportSubmissionWhereInput = {};
 
   if (input.protocol) {
@@ -542,29 +581,76 @@ export async function listSubmissionsPaginated(input: ListSubmissionsInput) {
 
   const skip = (input.page - 1) * input.pageSize;
 
-  const [submissions, total] = await prisma.$transaction([
-    prisma.reportSubmission.findMany({
-      where,
-      skip,
-      take: input.pageSize,
-      orderBy: { createdAt: "desc" },
-      include: {
-        template: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-          },
-        },
+  const submissionInclude = {
+    template: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
       },
-    }),
-    prisma.reportSubmission.count({ where }),
-  ]);
+    },
+    workflowSteps: {
+      select: {
+        id: true,
+        order: true,
+        name: true,
+        status: true,
+        authorizedRoleKeys: true,
+        requiredPermissions: true,
+      },
+    },
+    serviceRequest: {
+      select: {
+        createdById: true,
+      },
+    },
+  } as const;
+
+  const user = options.authUser ?? null;
+
+  const [submissions, total] = user
+    ? await (async () => {
+        const allSubmissions = await prisma.reportSubmission.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          include: submissionInclude,
+        });
+
+        const visible = allSubmissions.filter((submission) =>
+          canViewSubmission(user, {
+            createdById: submission.serviceRequest?.createdById ?? null,
+            currentStepOrder: submission.currentStepOrder,
+            workflowStatus: submission.workflowStatus,
+            workflowSteps: submission.workflowSteps,
+          }),
+        );
+
+        return [visible.slice(skip, skip + input.pageSize), visible.length] as const;
+      })()
+    : await prisma.$transaction([
+        prisma.reportSubmission.findMany({
+          where,
+          skip,
+          take: input.pageSize,
+          orderBy: { createdAt: "desc" },
+          include: submissionInclude,
+        }),
+        prisma.reportSubmission.count({ where }),
+      ]);
+
+  const mappedSubmissions = submissions.map((submission) => {
+    const currentStep = resolveCurrentWorkflowStep(submission.workflowSteps, submission.currentStepOrder);
+
+    return {
+      ...submission,
+      currentStepName: (currentStep as { name?: string } | null)?.name ?? null,
+    };
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / input.pageSize));
 
   return {
-    submissions,
+    submissions: mappedSubmissions,
     pagination: {
       page: input.page,
       pageSize: input.pageSize,
@@ -613,6 +699,16 @@ export async function getSubmissionById(id: string) {
       fieldAnswers: {
         include: {
           field: true,
+        },
+      },
+      workflowSteps: {
+        orderBy: {
+          order: "asc",
+        },
+      },
+      serviceRequest: {
+        select: {
+          createdById: true,
         },
       },
     },
