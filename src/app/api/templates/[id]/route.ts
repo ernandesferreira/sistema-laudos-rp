@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, fail, ok } from "@/lib/http";
 import { updateTemplateSchema } from "@/application/laudos/schemas";
@@ -8,6 +9,8 @@ type Context = {
 
 export async function GET(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "templates.read");
+
     const { id } = await context.params;
     const template = await laudosService.getTemplateById(id);
 
@@ -23,6 +26,8 @@ export async function GET(_: Request, context: Context) {
 
 export async function PUT(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "templates.update");
+
     const { id } = await context.params;
     const body = await request.json();
     const input = updateTemplateSchema.parse(body);
@@ -41,6 +46,8 @@ export async function PUT(request: Request, context: Context) {
 
 export async function DELETE(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "templates.archive");
+
     const { id } = await context.params;
     const deleted = await laudosService.deleteTemplate(id);
 

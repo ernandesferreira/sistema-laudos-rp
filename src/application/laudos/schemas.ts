@@ -80,6 +80,6 @@ export const reorderFieldsSchema = z.object({
 export const submissionPayloadSchema = z.object({
   submittedByName: z.string().min(2).max(120).optional().nullable(),
   submittedByContact: z.string().min(2).max(120).optional().nullable(),
-  answers: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+  answers: z.record(z.string(), z.unknown()),
   meta: z.record(z.string(), z.unknown()).optional().nullable(),
 });

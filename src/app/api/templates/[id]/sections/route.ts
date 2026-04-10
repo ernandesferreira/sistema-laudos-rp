@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { createSectionSchema } from "@/application/laudos/schemas";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, ok } from "@/lib/http";
@@ -8,6 +9,8 @@ type Context = {
 
 export async function GET(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "templates.read");
+
     const { id } = await context.params;
     const sections = await laudosService.listSectionsByTemplateId(id);
     return ok({ sections });
@@ -18,6 +21,8 @@ export async function GET(_: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "sections.manage");
+
     const { id } = await context.params;
     const body = await request.json();
     const input = createSectionSchema.parse({ ...body, templateId: id });

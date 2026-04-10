@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, fail, ok } from "@/lib/http";
 
@@ -5,8 +6,10 @@ type Context = {
   params: Promise<{ id: string }>;
 };
 
-export async function GET(_: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "submissions.details.read");
+
     const { id } = await context.params;
     const submission = await laudosService.getSubmissionById(id);
 

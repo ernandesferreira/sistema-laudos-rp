@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { updateFieldSchema } from "@/application/laudos/schemas";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, ok } from "@/lib/http";
@@ -8,6 +9,8 @@ type Context = {
 
 export async function PUT(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "fields.manage");
+
     const { id } = await context.params;
     const body = await request.json();
     const input = updateFieldSchema.parse(body);
@@ -21,6 +24,8 @@ export async function PUT(request: Request, context: Context) {
 
 export async function DELETE(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "fields.manage");
+
     const { id } = await context.params;
     await laudosService.deleteField(id);
     return ok({ success: true });

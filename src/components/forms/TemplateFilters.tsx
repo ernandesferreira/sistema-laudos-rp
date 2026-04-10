@@ -67,7 +67,7 @@ export function TemplateFilters() {
   }
 
   return (
-    <div className="card grid gap-3 p-4 md:grid-cols-[1fr_200px_200px_auto] md:items-end">
+    <div className="glass-panel grid gap-3 rounded-2xl p-4 md:grid-cols-[1fr_200px_200px_auto] md:items-end">
       <div>
         <label className="label" htmlFor="template-search">
           Busca

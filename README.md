@@ -92,6 +92,17 @@ No painel do Vercel, mantenha as variaveis de ambiente de producao:
 prisma/
 	schema.prisma
 src/
+	auth/
+		authorization.ts
+		roles.ts
+		permissions.ts
+		routeProtection.ts
+		session.ts
+		guards.ts
+	application/
+		auth/
+			rbacSchemas.ts
+			rbacService.ts
 	app/
 		(admin)/
 			layout.tsx
@@ -113,12 +124,16 @@ src/
 		page.tsx
 	components/
 		admin/
+		auth/
 		forms/
 		shared/
 	domain/laudos/
 	application/laudos/
 	infra/repositories/
+	docs/
+		rbac-architecture.md
 	lib/
+middleware.ts
 ```
 
 ## Responsabilidade dos arquivos criados
@@ -131,6 +146,18 @@ src/
 - `src/application/laudos/schemas.ts`: contratos de entrada com Zod para APIs.
 - `src/application/laudos/service.ts`: fachada de caso de uso para laudos.
 - `src/infra/repositories/laudosRepository.ts`: acesso a dados Prisma e regras de persistencia.
+- `src/infra/repositories/authRepository.ts`: leitura de perfil de autenticacao e papeis ativos do usuario.
+- `src/infra/repositories/rbacRepository.ts`: acesso a dados da matriz RBAC (roles, permissions e role_permissions).
+- `src/auth/roles.ts`: perfis oficiais do sistema.
+- `src/auth/permissions.ts`: catalogo padronizado de permissoes e mapeamento default por perfil.
+- `src/auth/authorization.ts`: helpers reutilizaveis (`hasPermission`, `hasAllPermissions`, `hasAnyRole`).
+- `src/auth/session.ts`: resolucao de identidade atual (headers/cookies) e enriquecimento com roles/permissoes.
+- `src/auth/guards.ts`: guardas reutilizaveis para pagina e API.
+- `src/auth/routeProtection.ts`: politicas de protecao por prefixo de rota.
+- `src/components/auth/PermissionGate.tsx`: exemplo de protecao de interface por permissao.
+- `src/application/auth/rbacSchemas.ts`: contratos de entrada para manutencao da matriz RBAC.
+- `src/application/auth/rbacService.ts`: casos de uso para leitura e alteracao de permissoes por perfil.
+- `middleware.ts`: camada de protecao de rotas no Edge com enforcement opcional.
 - `src/app/layout.tsx`: layout raiz com metadata e aviso global de sistema ficticio RP.
 - `src/app/globals.css`: design tokens, componentes utilitarios e base responsiva.
 - `src/app/page.tsx`: landing inicial com entrada para painel e modelos.
@@ -160,7 +187,11 @@ src/
 
 ## Schema inicial do banco
 
-- `User`: base para autenticacao/permissoes futuras (`Role` com `ADMIN`, `MANAGER`, `VIEWER`).
+- `User`: base da identidade.
+- `Role` (`roles`): papeis do sistema (`super_admin`, `admin`, `perito_rp`, `operador`, `leitor`, `juiz`, `medico`).
+- `Permission` (`permissions`): catalogo de permissoes padronizadas do sistema.
+- `RolePermission` (`role_permissions`): relacao N:N entre papeis e permissoes.
+- `UserRole` (`user_roles`): atribuicoes de papeis por usuario, com suporte a expiracao e auditoria basica.
 - `ReportTemplate`: modelo de laudo (titulo, slug, status, relacoes).
 - `ReportSection`: secoes ordenadas por template.
 - `ReportField`: campos dinamicos por secao (tipo, obrigatoriedade, opcoes e validacao JSON).
@@ -188,3 +219,29 @@ src/
 - UI desacoplada em `components`.
 
 Essa base permite adicionar autenticacao (NextAuth/JWT), middlewares de permissao e trilha de auditoria sem reestruturar o projeto.
+
+## Auth preparado (sem provedor externo)
+
+Convencao de permissao:
+
+- Formato: `recurso.acao`
+- Exemplos: `templates.manage`, `submissions.read`, `users.manage`
+
+Rollout gradual:
+
+- `AUTH_ENFORCE_MIDDLEWARE=false`: middleware so propaga identidade (nao bloqueia)
+- `AUTH_ENFORCE_GUARDS=false`: guardas de pagina/API nao bloqueiam
+
+Quando existir login/sessao real, basta:
+
+1. Popular cookies/headers (`auth_user_id`, `auth_roles` / `x-auth-user-id`, `x-auth-roles`).
+2. Ligar os flags para `true`.
+3. Ajustar regras em `src/auth/permissions.ts` e `src/auth/routeProtection.ts`.
+
+Seed inicial de roles:
+
+```bash
+npm run db:seed:roles
+```
+
+O seed tambem sincroniza permissoes e relacionamentos role_permissions.

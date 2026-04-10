@@ -1,53 +1,114 @@
-import Link from "next/link";
+import { hasPermission } from "@/auth/authorization";
+import { requirePagePermission } from "@/auth/guards";
+import { getCurrentAuthUser } from "@/auth/session";
 import { laudosService } from "@/application/laudos/service";
+import { listSubmissionsQuerySchema } from "@/application/laudos/submissionSchemas";
+import { SubmissionFilters } from "@/components/admin/SubmissionFilters";
+import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PageHeader } from "@/components/shared/PageHeader";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubmissionsPage() {
-  const submissions = await laudosService.listSubmissions();
+type Props = {
+  searchParams: Promise<{
+    page?: string | string[];
+    pageSize?: string | string[];
+    protocol?: string | string[];
+    name?: string | string[];
+    templateId?: string | string[];
+    status?: string | string[];
+    dateFrom?: string | string[];
+    dateTo?: string | string[];
+  }>;
+};
+
+function firstValue(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+export default async function SubmissionsPage({ searchParams }: Props) {
+  await requirePagePermission("submissions.read");
+
+  const authUser = await getCurrentAuthUser();
+  const canReadSubmissionDetails = authUser ? hasPermission(authUser, "submissions.details.read") : false;
+
+  const rawParams = await searchParams;
+  const parsedQuery = listSubmissionsQuerySchema.safeParse({
+    page: firstValue(rawParams.page),
+    pageSize: firstValue(rawParams.pageSize),
+    protocol: firstValue(rawParams.protocol),
+    name: firstValue(rawParams.name),
+    templateId: firstValue(rawParams.templateId),
+    status: firstValue(rawParams.status),
+    dateFrom: firstValue(rawParams.dateFrom),
+    dateTo: firstValue(rawParams.dateTo),
+  });
+
+  const filters = parsedQuery.success
+    ? parsedQuery.data
+    : listSubmissionsQuerySchema.parse({});
+
+  const [result, templateOptions] = await Promise.all([
+    laudosService.listSubmissionsPaginated(filters),
+    laudosService.listSubmissionTemplateOptions(),
+  ]);
+
+  const filtersKey = JSON.stringify({
+    protocol: filters.protocol,
+    name: filters.name,
+    templateId: filters.templateId,
+    status: filters.status,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    pageSize: filters.pageSize,
+  });
 
   return (
     <section className="space-y-4">
       <PageHeader
-        title="Submisses"
-        description="Historico de laudos preenchidos por terceiros."
+        title="Submissoes"
+        description="Historico de solicitacoes recebidas com filtros, busca e paginacao."
       />
 
-      {submissions.length === 0 ? (
+      <SubmissionFilters
+        key={filtersKey}
+        templateOptions={templateOptions}
+        current={{
+          protocol: filters.protocol,
+          name: filters.name,
+          templateId: filters.templateId,
+          status: filters.status,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          pageSize: filters.pageSize,
+        }}
+      />
+
+      {result.pagination.total === 0 ? (
         <EmptyState
           title="Nenhuma submissao"
-          description="As respostas publicas aparecerao aqui quando enviadas."
+          description="Nenhuma solicitacao encontrada para os filtros atuais."
         />
       ) : (
-        <div className="space-y-2">
-          {submissions.map((submission) => (
-            <article
-              key={submission.id}
-              className="card flex flex-col justify-between gap-3 p-4 md:flex-row md:items-center"
-            >
-              <div>
-                <p className="text-xs font-semibold uppercase text-brand-700">
-                  {submission.template.title}
-                </p>
-                <p className="text-sm text-slate-600">
-                  {new Intl.DateTimeFormat("pt-BR", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  }).format(submission.createdAt)}
-                </p>
-                <p className="text-sm text-slate-600">
-                  Responsavel: {submission.submittedByName ?? "Nao informado"}
-                </p>
-              </div>
-
-              <Link href={`/submissions/${submission.id}`} className="btn-secondary">
-                Ver detalhes
-              </Link>
-            </article>
-          ))}
-        </div>
+        <SubmissionsTable
+          submissions={result.submissions}
+          pagination={result.pagination}
+          canViewDetails={canReadSubmissionDetails}
+          filters={{
+            protocol: filters.protocol,
+            name: filters.name,
+            templateId: filters.templateId,
+            status: filters.status,
+            dateFrom: filters.dateFrom,
+            dateTo: filters.dateTo,
+            pageSize: filters.pageSize,
+          }}
+        />
       )}
     </section>
   );

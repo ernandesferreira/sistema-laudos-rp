@@ -7,12 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  MANAGER
-  VIEWER
-}
-
 enum FieldType {
   TEXT
   TEXTAREA
@@ -44,16 +38,178 @@ enum TemplateStatus {
   ARCHIVED
 }
 
+enum SubmissionWorkflowStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING
+  FINAL_APPROVED
+  FINAL_REJECTED
+}
+
+enum WorkflowStepStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum WorkflowDecision {
+  APTO
+  NAO_APTO
+  PENDENTE
+  APROVADO
+  REPROVADO
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  FINAL_APPROVED
+  FINAL_REJECTED
+  CANCELLED
+}
+
+enum RequestWorkflowInstanceStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING
+  FINAL_APPROVED
+  FINAL_REJECTED
+  CANCELLED
+}
+
+enum RequestWorkflowStepStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum RequestWorkflowStepDecision {
+  APTO
+  NAO_APTO
+  PENDENTE
+  APROVADO
+  REPROVADO
+}
+
+enum RequestStatusChangeSource {
+  MANUAL
+  WORKFLOW
+  SYSTEM
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
-  email        String   @unique
+  passportNumber String @unique
+  email        String
   passwordHash String?
-  role         Role     @default(VIEWER)
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  templatesCreated ReportTemplate[] @relation("TemplateCreatedBy")
+  templatesCreated             ReportTemplate[]          @relation("TemplateCreatedBy")
+  roles                        UserRole[]
+  roleAssignments              UserRole[]                @relation("RoleAssignedBy")
+  workflowStepsExecuted        SubmissionWorkflowStep[]  @relation("WorkflowStepExecutedBy")
+  workflowEventsPerformed      SubmissionWorkflowEvent[] @relation("WorkflowEventPerformedBy")
+  serviceRequestsOpened        ServiceRequest[]          @relation("ServiceRequestOpenedBy")
+  requestWorkflowStepsExecuted RequestWorkflowStep[]     @relation("RequestWorkflowStepExecutedBy")
+  requestStatusChanges         RequestStatusHistory[]    @relation("RequestStatusChangedBy")
+}
+
+model Citizen {
+  id                       String    @id @default(cuid())
+  fullName                 String
+  documentType             String    @default("CPF")
+  documentNumber           String
+  documentNumberNormalized String    @unique
+  birthDate                DateTime?
+  phone                    String?
+  email                    String?
+  metadata                 Json?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
+
+  serviceRequests ServiceRequest[]
+
+  @@index([fullName])
+  @@map("citizens")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users           UserRole[]
+  rolePermissions RolePermission[]
+
+  @@index([key])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  resource    String
+  description String?
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+
+  @@index([key])
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id         String    @id @default(cuid())
+  userId     String
+  roleId     String
+  assignedAt DateTime  @default(now())
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  assignedById String?
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("RoleAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([userId, expiresAt])
+  @@index([roleId])
+  @@index([assignedById])
+  @@map("user_roles")
 }
 
 model ReportTemplate {
@@ -69,10 +225,12 @@ model ReportTemplate {
   updatedAt   DateTime       @updatedAt
 
   createdById String?
-  createdBy   User?    @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?   @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  sections    ReportSection[]
-  submissions ReportSubmission[]
+  sections        ReportSection[]
+  submissions     ReportSubmission[]
+  serviceRequests ServiceRequest[]
+  workflow        TemplateWorkflow?
 
   @@index([createdAt])
   @@index([status, isActive, createdAt])
@@ -96,21 +254,21 @@ model ReportSection {
 }
 
 model ReportField {
-  id          String    @id @default(cuid())
-  label       String
-  name        String
-  type        FieldType
-  placeholder String?
-  helpText    String?
-  required    Boolean   @default(false)
-  order       Int       @default(0)
+  id           String    @id @default(cuid())
+  label        String
+  name         String
+  type         FieldType
+  placeholder  String?
+  helpText     String?
+  required     Boolean   @default(false)
+  order        Int       @default(0)
   defaultValue Json?
-  mask        String?
-  isActive    Boolean   @default(true)
-  options     Json?
-  validation  Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  mask         String?
+  isActive     Boolean   @default(true)
+  options      Json?
+  validation   Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   sectionId String
   section   ReportSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -122,29 +280,267 @@ model ReportField {
 }
 
 model ReportSubmission {
-  id               String           @id @default(cuid())
-  submittedByName  String?
-  submittedByContact String?
-  status           SubmissionStatus @default(PENDING)
-  answers          Json
-  meta             Json?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                  String                   @id @default(cuid())
+  protocol            String?                  @unique
+  submittedByName     String?
+  submittedByContact  String?
+  status              SubmissionStatus         @default(PENDING)
+  workflowStatus      SubmissionWorkflowStatus @default(NOT_STARTED)
+  currentStepOrder    Int?
+  workflowStartedAt   DateTime?
+  workflowCompletedAt DateTime?
+  answers             Json
+  meta                Json?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   templateId String
   template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
-  fieldAnswers SubmissionFieldAnswer[]
+  fieldAnswers   SubmissionFieldAnswer[]
+  workflowSteps  SubmissionWorkflowStep[]
+  workflowEvents SubmissionWorkflowEvent[]
+  serviceRequest ServiceRequest?
 
+  @@index([protocol])
   @@index([templateId, createdAt])
 }
 
+model ServiceRequest {
+  id               String               @id @default(cuid())
+  protocol         String               @unique
+  citizenName      String
+  citizenDocument  String
+  citizenContact   String
+  initialNotes     String?
+  status           ServiceRequestStatus @default(OPEN)
+  currentStepOrder Int?
+  openedAt         DateTime             @default(now())
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  citizenId String
+  citizen   Citizen @relation(fields: [citizenId], references: [id], onDelete: Restrict)
+
+  templateId String
+  template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdById String
+  createdBy   User   @relation("ServiceRequestOpenedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  submissionId String           @unique
+  submission   ReportSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  workflowInstance RequestWorkflowInstance?
+  statusHistory    RequestStatusHistory[]
+
+  @@index([protocol])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([citizenId, createdAt])
+  @@index([templateId, createdAt])
+  @@index([createdById, createdAt])
+}
+
+model TemplateWorkflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  templateId String         @unique
+  template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  steps                    TemplateWorkflowStep[]
+  requestWorkflowInstances RequestWorkflowInstance[]
+
+  @@index([templateId])
+}
+
+model TemplateWorkflowStep {
+  id                   String   @id @default(cuid())
+  name                 String
+  description          String?
+  order                Int
+  areaKey              String
+  authorizedRoleKeys   Json
+  requiredPermissions  Json
+  instructions         String?
+  paymentRequiredCents Int?
+  stageFieldKeys       Json?
+  decisionRequired     Boolean  @default(true)
+  requiresObservation  Boolean  @default(false)
+  isRequired           Boolean  @default(true)
+  isFinalStage         Boolean  @default(false)
+  transitionRules      Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workflowId String
+  workflow   TemplateWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  submissionSteps      SubmissionWorkflowStep[]
+  requestWorkflowSteps RequestWorkflowStep[]
+
+  @@unique([workflowId, order])
+  @@index([workflowId, order])
+}
+
+model RequestWorkflowInstance {
+  id               String                        @id @default(cuid())
+  status           RequestWorkflowInstanceStatus @default(NOT_STARTED)
+  currentStepOrder Int?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  serviceRequestId String         @unique
+  serviceRequest   ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  templateWorkflowId String
+  templateWorkflow   TemplateWorkflow @relation(fields: [templateWorkflowId], references: [id], onDelete: Restrict)
+
+  steps         RequestWorkflowStep[]
+  statusHistory RequestStatusHistory[]
+
+  @@index([status, createdAt])
+  @@index([templateWorkflowId])
+  @@map("request_workflow_instances")
+}
+
+model RequestWorkflowStep {
+  id                  String                       @id @default(cuid())
+  stepOrder           Int
+  stepName            String
+  areaKey             String
+  authorizedRoleKeys  Json
+  requiredPermissions Json
+  decisionRequired    Boolean                      @default(true)
+  requiresObservation Boolean                      @default(false)
+  isRequired          Boolean                      @default(true)
+  isFinalStage        Boolean                      @default(false)
+  status              RequestWorkflowStepStatus    @default(WAITING)
+  decision            RequestWorkflowStepDecision?
+  observations        String?
+  startedAt           DateTime?
+  executedAt          DateTime?
+  metadata            Json?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+
+  workflowInstanceId String
+  workflowInstance   RequestWorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+
+  templateWorkflowStepId String?
+  templateWorkflowStep   TemplateWorkflowStep? @relation(fields: [templateWorkflowStepId], references: [id], onDelete: SetNull)
+
+  executedByUserId String?
+  executedBy       User?   @relation("RequestWorkflowStepExecutedBy", fields: [executedByUserId], references: [id], onDelete: SetNull)
+
+  statusHistory RequestStatusHistory[]
+
+  @@unique([workflowInstanceId, stepOrder])
+  @@index([workflowInstanceId, status])
+  @@index([executedByUserId, executedAt])
+  @@map("request_workflow_steps")
+}
+
+model RequestStatusHistory {
+  id         String                    @id @default(cuid())
+  fromStatus ServiceRequestStatus?
+  toStatus   ServiceRequestStatus
+  source     RequestStatusChangeSource @default(SYSTEM)
+  reason     String?
+  metadata   Json?
+  changedAt  DateTime                  @default(now())
+
+  serviceRequestId String
+  serviceRequest   ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  changedByUserId String?
+  changedBy       User?   @relation("RequestStatusChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  workflowInstanceId String?
+  workflowInstance   RequestWorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull)
+
+  workflowStepId String?
+  workflowStep   RequestWorkflowStep? @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
+
+  @@index([serviceRequestId, changedAt])
+  @@index([toStatus, changedAt])
+  @@index([changedByUserId, changedAt])
+  @@map("request_status_history")
+}
+
+model SubmissionWorkflowStep {
+  id                   String             @id @default(cuid())
+  order                Int
+  name                 String
+  description          String?
+  areaKey              String
+  authorizedRoleKeys   Json
+  requiredPermissions  Json
+  instructions         String?
+  paymentRequiredCents Int?
+  stageFieldKeys       Json?
+  decisionRequired     Boolean            @default(true)
+  requiresObservation  Boolean            @default(false)
+  isRequired           Boolean            @default(true)
+  isFinalStage         Boolean            @default(false)
+  transitionRules      Json?
+  status               WorkflowStepStatus @default(WAITING)
+  decision             WorkflowDecision?
+  observations         String?
+  startedAt            DateTime?
+  executedAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  submissionId String
+  submission   ReportSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  templateWorkflowStepId String?
+  templateWorkflowStep   TemplateWorkflowStep? @relation(fields: [templateWorkflowStepId], references: [id], onDelete: SetNull)
+
+  executedById String?
+  executedBy   User?   @relation("WorkflowStepExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+
+  events SubmissionWorkflowEvent[]
+
+  @@index([submissionId, order])
+  @@index([status])
+}
+
+model SubmissionWorkflowEvent {
+  id          String            @id @default(cuid())
+  action      String
+  decision    WorkflowDecision?
+  notes       String?
+  metadata    Json?
+  performedAt DateTime          @default(now())
+
+  submissionId String
+  submission   ReportSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  submissionStepId String?
+  submissionStep   SubmissionWorkflowStep? @relation(fields: [submissionStepId], references: [id], onDelete: SetNull)
+
+  performedById String?
+  performedBy   User?   @relation("WorkflowEventPerformedBy", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([submissionId, performedAt])
+  @@index([submissionStepId])
+}
+
 model SubmissionFieldAnswer {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   labelSnapshot String
   typeSnapshot  FieldType
   value         Json?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   submissionId String
   submission   ReportSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)

@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import {
   createTemplateSchema,
@@ -7,6 +8,8 @@ import { asHttpError, ok } from "@/lib/http";
 
 export async function GET(request: Request) {
   try {
+    await requireApiPermission(request, "templates.read");
+
     const { searchParams } = new URL(request.url);
 
     const query = listTemplatesQuerySchema.parse({
@@ -24,6 +27,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await requireApiPermission(request, "templates.create");
+
     const body = await request.json();
     const input = createTemplateSchema.parse(body);
 

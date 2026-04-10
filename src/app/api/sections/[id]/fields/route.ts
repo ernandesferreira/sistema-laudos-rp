@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { createFieldSchema } from "@/application/laudos/schemas";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, ok } from "@/lib/http";
@@ -8,6 +9,8 @@ type Context = {
 
 export async function GET(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "fields.manage");
+
     const { id } = await context.params;
     const fields = await laudosService.listFieldsBySectionId(id);
     return ok({ fields });
@@ -18,6 +21,8 @@ export async function GET(_: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "fields.manage");
+
     const { id } = await context.params;
     const body = await request.json();
     const input = createFieldSchema.parse({ ...body, sectionId: id });

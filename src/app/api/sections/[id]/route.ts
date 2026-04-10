@@ -1,3 +1,4 @@
+import { requireApiPermission } from "@/auth/guards";
 import { updateSectionSchema } from "@/application/laudos/schemas";
 import { laudosService } from "@/application/laudos/service";
 import { asHttpError, ok } from "@/lib/http";
@@ -8,6 +9,8 @@ type Context = {
 
 export async function PUT(request: Request, context: Context) {
   try {
+    await requireApiPermission(request, "sections.manage");
+
     const { id } = await context.params;
     const body = await request.json();
     const input = updateSectionSchema.parse(body);
@@ -21,9 +24,18 @@ export async function PUT(request: Request, context: Context) {
 
 export async function DELETE(_: Request, context: Context) {
   try {
+    await requireApiPermission(_, "sections.manage");
+
     const { id } = await context.params;
-    await laudosService.deleteSection(id);
-    return ok({ success: true });
+    const result = await laudosService.deleteSection(id);
+
+    return ok({
+      success: true,
+      archived: result.archived,
+      message: result.archived
+        ? "Secao arquivada porque possui historico vinculado."
+        : "Secao excluida.",
+    });
   } catch (error) {
     return asHttpError(error);
   }

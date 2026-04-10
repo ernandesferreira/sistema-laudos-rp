@@ -23,6 +23,7 @@ export default async function PublicTemplatePage({ params }: Props) {
         <p className="text-xs font-semibold uppercase text-brand-700">Formulario publico RP</p>
         <h1 className="text-4xl uppercase">{template.title}</h1>
         {template.description ? <p className="mt-2 text-sm text-slate-600">{template.description}</p> : null}
+        <p className="mt-2 text-xs text-slate-500">Sistema ficticio para uso em roleplay.</p>
       </header>
 
       <Disclaimer />

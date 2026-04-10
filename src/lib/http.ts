@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { AppError } from "@/lib/errors";
 
 export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -16,6 +17,10 @@ export function fail(message: string, status = 400, details?: unknown) {
 }
 
 export function asHttpError(error: unknown) {
+  if (error instanceof AppError) {
+    return fail(error.message, error.status, error.details);
+  }
+
   if (error instanceof ZodError) {
     return fail("Validation failed", 422, error.flatten());
   }

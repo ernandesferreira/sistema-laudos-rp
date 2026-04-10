@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { FieldType } from "@/domain/laudos/types";
+import { FieldRenderer } from "@/components/forms/public-fields/FieldRenderer";
 
 type PublicField = {
   id: string;
@@ -11,6 +12,9 @@ type PublicField = {
   required: boolean;
   placeholder: string | null;
   helpText: string | null;
+  defaultValue: unknown;
+  mask: string | null;
+  isActive: boolean;
   options: unknown;
 };
 
@@ -29,96 +33,68 @@ type PublicTemplate = {
   sections: PublicSection[];
 };
 
-function isOptionArray(options: unknown): options is string[] {
-  return Array.isArray(options) && options.every((item) => typeof item === "string");
-}
-
-function renderInput(
-  field: PublicField,
-  value: string,
-  onChange: (next: string) => void,
-) {
-  const common = {
-    id: field.id,
-    name: field.name,
-    required: field.required,
-    className: "input",
-  };
-
-  switch (field.type) {
-    case "TEXTAREA":
-      return (
-        <textarea
-          {...common}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={field.placeholder ?? ""}
-          className="input min-h-28"
-        />
-      );
-    case "NUMBER":
-      return (
-        <input
-          {...common}
-          type="number"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={field.placeholder ?? ""}
-        />
-      );
-    case "DATE":
-      return <input {...common} type="date" value={value} onChange={(event) => onChange(event.target.value)} />;
-    case "DATETIME":
-      return (
-        <input
-          {...common}
-          type="datetime-local"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      );
-    case "SELECT": {
-      const options = isOptionArray(field.options) ? field.options : [];
-      return (
-        <select {...common} value={value} onChange={(event) => onChange(event.target.value)}>
-          <option value="">Selecione...</option>
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    default:
-      return (
-        <input
-          {...common}
-          type="text"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={field.placeholder ?? ""}
-        />
-      );
+function isBlank(value: unknown) {
+  if (value === null || value === undefined) {
+    return true;
   }
+
+  if (typeof value === "string") {
+    return value.trim() === "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+
+  return false;
 }
 
 export function PublicReportForm({ template }: { template: PublicTemplate }) {
   const [personName, setPersonName] = useState("");
   const [personContact, setPersonContact] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [protocol, setProtocol] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fields = useMemo(
-    () => template.sections.flatMap((section) => section.fields),
+    () =>
+      template.sections
+        .flatMap((section) => section.fields)
+        .filter((field) => field.isActive),
     [template.sections],
   );
 
+  function validateClientSide() {
+    const errors: Record<string, string> = {};
+
+    for (const field of fields) {
+      const value = answers[field.name];
+
+      if (field.required && isBlank(value)) {
+        errors[field.name] = `${field.label} e obrigatorio.`;
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const clientValid = validateClientSide();
+
+    if (!clientValid) {
+      setStatusMessage("Revise os campos obrigatorios destacados.");
+      return;
+    }
+
     setIsSubmitting(true);
-    setStatus(null);
+    setStatusMessage(null);
+    setProtocol(null);
+    setFieldErrors({});
 
     const response = await fetch(`/api/public/templates/${template.slug}/submit`, {
       method: "POST",
@@ -133,13 +109,19 @@ export function PublicReportForm({ template }: { template: PublicTemplate }) {
     const payload = await response.json();
 
     if (!response.ok) {
-      setStatus(payload.error ?? "Falha ao enviar laudo");
+      if (payload?.details?.fieldErrors) {
+        setFieldErrors(payload.details.fieldErrors as Record<string, string>);
+      }
+
+      setStatusMessage(payload.error ?? "Falha ao enviar solicitacao");
       setIsSubmitting(false);
       return;
     }
 
-    setStatus("Laudo enviado com sucesso.");
+    setStatusMessage("Solicitacao enviada com sucesso.");
+    setProtocol(payload.protocol ?? null);
     setAnswers({});
+    setFieldErrors({});
     setPersonName("");
     setPersonContact("");
     setIsSubmitting(false);
@@ -171,16 +153,26 @@ export function PublicReportForm({ template }: { template: PublicTemplate }) {
           {section.description ? <p className="text-sm text-slate-600">{section.description}</p> : null}
 
           <div className="grid gap-3">
-            {section.fields.map((field) => (
+            {section.fields
+              .filter((field) => field.isActive)
+              .map((field) => (
               <div key={field.id}>
                 <label className="label" htmlFor={field.id}>
                   {field.label}
                   {field.required ? " *" : ""}
                 </label>
-                {renderInput(field, answers[field.name] ?? "", (next) =>
-                  setAnswers((current) => ({ ...current, [field.name]: next }))
-                )}
+                <FieldRenderer
+                  field={field}
+                  value={answers[field.name] ?? field.defaultValue ?? ""}
+                  error={fieldErrors[field.name]}
+                  onChange={(next) =>
+                    setAnswers((current) => ({ ...current, [field.name]: next }))
+                  }
+                />
                 {field.helpText ? <p className="mt-1 text-xs text-slate-500">{field.helpText}</p> : null}
+                {fieldErrors[field.name] ? (
+                  <p className="mt-1 text-xs font-semibold text-danger-700">{fieldErrors[field.name]}</p>
+                ) : null}
               </div>
             ))}
           </div>
@@ -188,10 +180,18 @@ export function PublicReportForm({ template }: { template: PublicTemplate }) {
       ))}
 
       <button type="submit" className="btn-primary" disabled={isSubmitting || fields.length === 0}>
-        {isSubmitting ? "Enviando..." : "Enviar laudo"}
+        {isSubmitting ? "Enviando..." : "Enviar solicitacao"}
       </button>
 
-      {status ? <p className="text-sm font-medium text-brand-700">{status}</p> : null}
+      {statusMessage ? <p className="text-sm font-medium text-brand-700">{statusMessage}</p> : null}
+
+      {protocol ? (
+        <div className="rounded-xl border border-ok-700/20 bg-ok-100 px-4 py-3 text-sm text-ok-700">
+          Protocolo de envio: <strong>{protocol}</strong>
+        </div>
+      ) : null}
+
+      <p className="text-xs text-slate-500">Sistema ficticio para uso em roleplay.</p>
     </form>
   );
 }

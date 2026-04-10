@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requirePagePermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { PageHeader } from "@/components/shared/PageHeader";
 
@@ -21,6 +23,8 @@ function stringifyValue(value: unknown) {
 }
 
 export default async function SubmissionDetailsPage({ params }: Props) {
+  await requirePagePermission("submissions.details.read");
+
   const { id } = await params;
   const submission = await laudosService.getSubmissionById(id);
 
@@ -35,6 +39,11 @@ export default async function SubmissionDetailsPage({ params }: Props) {
       <PageHeader
         title="Detalhes da submissao"
         description={`Modelo: ${submission.template.title}`}
+        actions={
+          <Link href={`/submissions/${submission.id}/workflow`} className="btn-secondary">
+            Aprovacoes da submissao
+          </Link>
+        }
       />
 
       <article className="card p-4 md:p-6">
@@ -59,6 +68,10 @@ export default async function SubmissionDetailsPage({ params }: Props) {
           <div>
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p className="text-sm text-slate-700">{submission.status}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-slate-500">Protocolo</p>
+            <p className="text-sm text-slate-700">{submission.protocol ?? "N/A"}</p>
           </div>
         </div>
       </article>

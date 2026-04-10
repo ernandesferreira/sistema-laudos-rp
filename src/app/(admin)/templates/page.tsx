@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { hasPermission } from "@/auth/authorization";
+import { requirePagePermission } from "@/auth/guards";
+import { getCurrentAuthUser } from "@/auth/session";
 import { laudosService } from "@/application/laudos/service";
 import { listTemplatesQuerySchema } from "@/application/laudos/schemas";
 import { TemplateFilters } from "@/components/forms/TemplateFilters";
@@ -28,6 +31,12 @@ function mapStatusLabel(status: "DRAFT" | "PUBLISHED" | "ARCHIVED") {
 }
 
 export default async function TemplatesPage({ searchParams }: Props) {
+  await requirePagePermission("templates.read");
+
+  const authUser = await getCurrentAuthUser();
+  const canCreateTemplate = authUser ? hasPermission(authUser, "templates.create") : false;
+  const canUpdateTemplate = authUser ? hasPermission(authUser, "templates.update") : false;
+
   const rawFilters = await searchParams;
   const parsed = listTemplatesQuerySchema.safeParse(rawFilters);
   const filters = parsed.success ? parsed.data : {};
@@ -36,12 +45,14 @@ export default async function TemplatesPage({ searchParams }: Props) {
   return (
     <section className="space-y-4">
       <PageHeader
-        title="Modelos de laudo"
+        title="Modelos de solicitacao"
         description="Crie e organize modelos com secoes e campos dinamicos."
         actions={
-          <Link href="/templates/new" className="btn-primary">
-            Novo modelo
-          </Link>
+          canCreateTemplate ? (
+            <Link href="/templates/new" className="btn-primary">
+              Novo modelo
+            </Link>
+          ) : null
         }
       />
 
@@ -58,40 +69,40 @@ export default async function TemplatesPage({ searchParams }: Props) {
             <article key={template.id} className="card p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h2 className="text-2xl uppercase">{template.title}</h2>
-                  <p className="text-xs text-slate-500">/{template.slug}</p>
+                  <h2 className="text-2xl uppercase text-slate-100">{template.title}</h2>
+                  <p className="text-xs text-slate-400">/{template.slug}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span
                     className={`rounded-full px-2 py-1 text-xs font-semibold ${
                       template.isActive
-                        ? "bg-ok-100 text-ok-700"
-                        : "bg-danger-100 text-danger-700"
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : "bg-rose-500/20 text-rose-200"
                     }`}
                   >
                     {template.isActive ? "Ativo" : "Inativo"}
                   </span>
-                  <span className="rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
+                  <span className="rounded-full bg-sky-500/20 px-2 py-1 text-xs font-semibold text-sky-200">
                     {mapStatusLabel(template.status)}
                   </span>
                 </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-600">{template.description ?? "Sem descricao"}</p>
+              <p className="mt-2 text-sm text-slate-300">{template.description ?? "Sem descricao"}</p>
 
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-                <span className="rounded-full bg-brand-50 px-2 py-1">
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1">
                   Versao: {template.version}
                 </span>
-                <span className="rounded-full bg-brand-50 px-2 py-1">
+                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1">
                   Secoes: {template._count.sections}
                 </span>
-                <span className="rounded-full bg-brand-50 px-2 py-1">
+                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-1">
                   Submisses: {template._count.submissions}
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
                 <p>
                   Criado em:{" "}
                   {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(
@@ -107,11 +118,13 @@ export default async function TemplatesPage({ searchParams }: Props) {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link href={`/templates/${template.id}`} className="btn-secondary">
-                  Editar
-                </Link>
+                {canUpdateTemplate ? (
+                  <Link href={`/templates/${template.id}`} className="btn-secondary">
+                    Editar
+                  </Link>
+                ) : null}
                 <Link href={`/laudos/${template.slug}`} className="btn-secondary">
-                  Formulario publico
+                  Formulario de solicitacao
                 </Link>
               </div>
             </article>

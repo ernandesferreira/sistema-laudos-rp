@@ -1,7 +1,10 @@
+import { requirePagePermission } from "@/auth/guards";
 import { TemplateCreateForm } from "@/components/forms/TemplateCreateForm";
 import { PageHeader } from "@/components/shared/PageHeader";
 
-export default function NewTemplatePage() {
+export default async function NewTemplatePage() {
+  await requirePagePermission("templates.create");
+
   return (
     <section className="space-y-4">
       <PageHeader

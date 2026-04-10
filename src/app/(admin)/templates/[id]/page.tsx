@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requirePagePermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { TemplateEditor } from "@/components/forms/TemplateEditor";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,6 +12,8 @@ type Props = {
 };
 
 export default async function TemplateDetailsPage({ params }: Props) {
+  await requirePagePermission("templates.update");
+
   const { id } = await params;
   const template = await laudosService.getTemplateById(id);
 
@@ -25,6 +28,9 @@ export default async function TemplateDetailsPage({ params }: Props) {
         description="CRUD completo de modelo, secoes e campos dinamicos."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Link href={`/templates/${template.id}/workflow`} className="btn-secondary">
+              Configurar aprovacoes
+            </Link>
             <Link href={`/templates/${template.id}/builder`} className="btn-secondary">
               Abrir Form Builder
             </Link>

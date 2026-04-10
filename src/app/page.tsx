@@ -1,40 +1,33 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentAuthUser } from "@/auth/session";
+import { LoginForm } from "@/components/auth/LoginForm";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentAuthUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-10 md:px-8">
-      <section className="card overflow-hidden p-6 shadow-sm md:p-10">
-        <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
-          <div>
-            <p className="mb-3 inline-block rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
-              Sistema de Laudos RP
+    <main className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-6xl items-center justify-center px-4 py-10 md:px-8">
+      <section className="glass-panel w-full max-w-5xl overflow-hidden rounded-3xl p-6 md:p-10">
+        <div className="grid gap-8 md:grid-cols-[1.15fr_0.85fr] md:items-center">
+          <div className="space-y-4">
+            <p className="inline-block rounded-full border border-sky-400/35 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-200">
+              Ambiente RP
             </p>
-            <h1 className="text-4xl uppercase text-ink md:text-5xl">
-              Plataforma ficticia para laudos em roleplay
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-slate-600 md:text-base">
-              Crie modelos dinâmicos, organize secoes e campos, compartilhe
-              formularios publicos e acompanhe submisses em um painel
-              administrativo profissional.
+            <h2 className="text-4xl uppercase leading-tight text-slate-100 md:text-5xl">
+              Central de solicitacoes com acesso seguro por passaporte
+            </h2>
+            <p className="max-w-2xl text-sm text-slate-300 md:text-base">
+              Use seu numero de passaporte e senha para acessar o painel administrativo.
+              O acesso respeita os perfis e permissoes cadastrados no sistema.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/dashboard" className="btn-primary">
-                Ir para painel
-              </Link>
-              <Link href="/templates" className="btn-secondary">
-                Gerenciar modelos
-              </Link>
-            </div>
           </div>
 
-          <div className="card border-brand-300 bg-brand-50 p-5">
-            <h2 className="text-2xl uppercase text-brand-700">
-              Aviso importante
-            </h2>
-            <p className="mt-2 text-sm text-slate-700">
-              Este sistema e totalmente ficticio e foi criado para ambientes RP.
-              Nao substitui laudos, processos ou documentos oficiais reais.
-            </p>
+          <div className="flex justify-center md:justify-end">
+            <LoginForm />
           </div>
         </div>
       </section>

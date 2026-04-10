@@ -83,7 +83,7 @@ export function TemplateCreateForm() {
             setForm((current) => ({ ...current, slug: event.target.value }))
           }
           required
-          placeholder="laudo-pericia-mecanica"
+          placeholder="solicitacao-pericia-mecanica"
         />
       </div>
 

@@ -25,7 +25,7 @@ export function RecentReportsTable({ items }: RecentReportsTableProps) {
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-600 bg-slate-900/70 p-10 text-center">
-        <p className="text-lg font-semibold text-slate-200">Nenhum laudo preenchido ainda</p>
+        <p className="text-lg font-semibold text-slate-200">Nenhuma solicitacao preenchida ainda</p>
         <p className="mt-1 text-sm text-slate-400">
           Assim que terceiros enviarem formularios, os ultimos registros aparecem aqui.
         </p>

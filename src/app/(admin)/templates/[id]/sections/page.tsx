@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requirePagePermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { TemplateSectionsManager } from "@/components/forms/TemplateSectionsManager";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,6 +12,8 @@ type Props = {
 };
 
 export default async function TemplateSectionsPage({ params }: Props) {
+  await requirePagePermission("sections.manage");
+
   const { id } = await params;
   const template = await laudosService.getTemplateById(id);
 

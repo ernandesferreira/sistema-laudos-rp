@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requirePagePermission } from "@/auth/guards";
 import { laudosService } from "@/application/laudos/service";
 import { FormBuilder } from "@/components/forms/FormBuilder";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -11,6 +12,8 @@ type Props = {
 };
 
 export default async function TemplateBuilderPage({ params }: Props) {
+  await requirePagePermission("sections.manage");
+
   const { id } = await params;
   const template = await laudosService.getTemplateById(id);
 
@@ -22,7 +25,7 @@ export default async function TemplateBuilderPage({ params }: Props) {
     <section className="space-y-4">
       <PageHeader
         title="Form Builder"
-        description="Monte o formulario com secoes e campos dinamicos para o laudo RP."
+        description="Monte o formulario com secoes e campos dinamicos para a solicitacao RP."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href={`/templates/${template.id}/sections`} className="btn-secondary">

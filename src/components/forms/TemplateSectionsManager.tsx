@@ -88,12 +88,14 @@ export function TemplateSectionsManager({ templateId, sections }: Props) {
       method: "DELETE",
     });
 
+    const payload = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      setStatus("Nao foi possivel excluir a secao.");
+      setStatus(payload.error ?? "Nao foi possivel excluir a secao.");
       return;
     }
 
-    setStatus("Secao excluida.");
+    setStatus(payload.message ?? "Secao excluida.");
     router.refresh();
   }
 
@@ -161,7 +163,7 @@ export function TemplateSectionsManager({ templateId, sections }: Props) {
       {sections.length === 0 ? (
         <div className="rounded-xl border border-dashed border-brand-300 p-6 text-center">
           <p className="text-base font-semibold text-slate-700">Nenhuma secao cadastrada</p>
-          <p className="text-sm text-slate-600">Adicione a primeira secao para estruturar o laudo.</p>
+          <p className="text-sm text-slate-600">Adicione a primeira secao para estruturar a solicitacao.</p>
         </div>
       ) : (
         <div className="space-y-3">
